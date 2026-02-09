@@ -1,0 +1,125 @@
+name: Build Android APK
+
+on:
+  repository_dispatch:
+    types: [build-app]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install ImageMagick
+        run: sudo apt-get update && sudo apt-get install -y imagemagick
+
+      - name: Download Icon
+        run: |
+          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
+          mkdir -p android/app/src/main/res/mipmap-xxhdpi
+          mkdir -p android/app/src/main/res/mipmap-xhdpi
+          mkdir -p android/app/src/main/res/mipmap-hdpi
+          mkdir -p android/app/src/main/res/mipmap-mdpi
+          
+          curl -L -o /tmp/icon.png "${{ github.event.client_payload.icon_url }}"
+          
+          convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+
+      - name: Update Package Name
+        run: |
+          PKG="${{ github.event.client_payload.package_name }}"
+          sed -i "s/package=\".*\"/package=\"$PKG\"/" android/app/src/main/AndroidManifest.xml
+          sed -i "s/namespace \".*\"/namespace \"$PKG\"/" android/app/build.gradle
+          sed -i "s/applicationId \".*\"/applicationId \"$PKG\"/" android/app/build.gradle
+
+      - name: Update App Name
+        run: |
+          NAME="${{ github.event.client_payload.name }}"
+          sed -i "s/android:label=\".*\"/android:label=\"$NAME\"/" android/app/src/main/AndroidManifest.xml
+
+      - name: Generate Config
+        run: |
+          cat > lib/app_config.dart << 'EOF'
+          class AppConfig {
+            static const String appName = '${{ github.event.client_payload.name }}';
+            static const String websiteUrl = '${{ github.event.client_payload.website_url }}';
+            static const String packageName = '${{ github.event.client_payload.package_name }}';
+            static const String primaryColor = '${{ github.event.client_payload.primary_color }}';
+            static const String themeMode = '${{ github.event.client_payload.theme_mode }}';
+            static const bool showNavigation = ${{ github.event.client_payload.navigation }};
+            static const bool pullToRefresh = ${{ github.event.client_payload.pull_to_refresh }};
+            static const String orientation = '${{ github.event.client_payload.orientation }}';
+            static const bool enableZoom = ${{ github.event.client_payload.enable_zoom }};
+            static const bool keepAwake = ${{ github.event.client_payload.keep_awake }};
+            static const bool openExternalLinks = ${{ github.event.client_payload.open_external_links }};
+          }
+          EOF
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: |
+          if [ "${{ github.event.client_payload.build_format }}" == "aab" ]; then
+            flutter build appbundle --release
+            BUILD_FILE="build/app/outputs/bundle/release/app-release.aab"
+          else
+            flutter build apk --release
+            BUILD_FILE="build/app/outputs/flutter-apk/app-release.apk"
+          fi
+          echo "BUILD_FILE=$BUILD_FILE" >> $GITHUB_ENV
+
+      - name: Upload to Supabase
+        run: |
+          APP_ID="${{ github.event.client_payload.app_id }}"
+          FORMAT="${{ github.event.client_payload.build_format }}"
+          
+          curl -X POST \
+            "${{ secrets.SUPABASE_URL }}/storage/v1/object/builds/${APP_ID}.${FORMAT}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"$BUILD_FILE"
+          
+          DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/builds/${APP_ID}.${FORMAT}"
+          
+          curl -X PATCH \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${APP_ID}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            -d "{\"status\": \"completed\", \"download_url\": \"${DOWNLOAD_URL}\"}"
+
+      - name: Send Email
+        run: |
+          DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/builds/${{ github.event.client_payload.app_id }}.${{ github.event.client_payload.build_format }}"
+          
+          curl -X POST 'https://api.resend.com/emails' \
+            -H "Authorization: Bearer ${{ secrets.RESEND_API_KEY }}" \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "from": "App Builder <onboarding@resend.dev>",
+              "to": ["${{ github.event.client_payload.notification_email }}"],
+              "subject": "✅ האפליקציה שלך \"${{ github.event.client_payload.name }}\" מוכנה!",
+              "html": "<div dir=\"rtl\"><h2>האפליקציה שלך מוכנה להורדה!</h2><p><strong>שם:</strong> ${{ github.event.client_payload.name }}</p><p><strong>Package:</strong> ${{ github.event.client_payload.package_name }}</p><p><a href=\"'"${DOWNLOAD_URL}"'\" style=\"background: #2196F3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;\">הורד ${{ github.event.client_payload.build_format == 'aab' && 'AAB' || 'APK' }}</a></p></div>"
+            }'
