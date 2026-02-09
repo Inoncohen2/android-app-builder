@@ -64,16 +64,17 @@ jobs:
             static const String appName = '${{ github.event.client_payload.name }}';
             static const String websiteUrl = '${{ github.event.client_payload.website_url }}';
             static const String packageName = '${{ github.event.client_payload.package_name }}';
-            static const String primaryColor = '${{ github.event.client_payload.primary_color }}';
-            static const String themeMode = '${{ github.event.client_payload.theme_mode }}';
-            static const bool showNavigation = ${{ github.event.client_payload.navigation }};
-            static const bool pullToRefresh = ${{ github.event.client_payload.pull_to_refresh }};
-            static const String orientation = '${{ github.event.client_payload.orientation }}';
-            static const bool enableZoom = ${{ github.event.client_payload.enable_zoom }};
-            static const bool keepAwake = ${{ github.event.client_payload.keep_awake }};
-            static const bool openExternalLinks = ${{ github.event.client_payload.open_external_links }};
+            static const String primaryColor = '${{ github.event.client_payload.config.primary_color }}';
+            static const String themeMode = '${{ github.event.client_payload.config.theme_mode }}';
+            static const bool showNavigation = ${{ github.event.client_payload.config.navigation }};
+            static const bool pullToRefresh = ${{ github.event.client_payload.config.pull_to_refresh }};
+            static const String orientation = '${{ github.event.client_payload.config.orientation }}';
+            static const bool enableZoom = ${{ github.event.client_payload.config.enable_zoom }};
+            static const bool keepAwake = ${{ github.event.client_payload.config.keep_awake }};
+            static const bool openExternalLinks = ${{ github.event.client_payload.config.open_external_links }};
           }
           EOF
+
 
       - name: Install Dependencies
         run: flutter pub get
