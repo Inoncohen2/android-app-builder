@@ -135,16 +135,32 @@ jobs:
             -H "Prefer: return=minimal" \
             -d "{\"status\": \"completed\", \"download_url\": \"${DOWNLOAD_URL}\"}"
 
-      - name: Send Email
+      - name: Send Beautiful Email
         run: |
           DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/builds/${{ github.event.client_payload.app_id }}.${{ github.event.client_payload.build_format }}"
+          PRIMARY_COLOR="${{ github.event.client_payload.config.primary_color }}"
+          [ -z "$PRIMARY_COLOR" ] && PRIMARY_COLOR="#2196F3"
+          ICON_URL="${{ github.event.client_payload.icon_url }}"
+          
+          # Build features badges
+          FEATURES=""
+          if [ "${{ github.event.client_payload.config.navigation }}" = "true" ]; then
+            FEATURES="${FEATURES}<span style='display:inline-block;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;margin:4px;'>🧭 Navigation</span>"
+          fi
+          if [ "${{ github.event.client_payload.config.pull_to_refresh }}" = "true" ]; then
+            FEATURES="${FEATURES}<span style='display:inline-block;background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);color:white;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;margin:4px;'>🔄 Refresh</span>"
+          fi
+          if [ "${{ github.event.client_payload.config.enable_zoom }}" = "true" ]; then
+            FEATURES="${FEATURES}<span style='display:inline-block;background:linear-gradient(135deg,#4facfe 0%,#00f2fe 100%);color:white;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;margin:4px;'>🔍 Zoom</span>"
+          fi
+          
+          # Create beautiful email
+          EMAIL_HTML="<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'></head><body style='margin:0;padding:0;font-family:Arial,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);'><div style='max-width:650px;margin:40px auto;padding:0 20px;'><div style='text-align:center;margin-bottom:24px;'><img src='https://res.cloudinary.com/ddsogd7hv/image/upload/v1770576910/Icon2_dvenip.png' style='width:80px;height:80px;border-radius:20px;box-shadow:0 8px 24px rgba(0,0,0,0.2);'/><div style='margin-top:12px;'><a href='https://web2app-builder.vercel.app/' style='color:white;text-decoration:none;font-size:24px;font-weight:700;'>Web2App Builder</a></div></div><div style='background:white;border-radius:24px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3);'><div style='background:${PRIMARY_COLOR};padding:48px 32px;text-align:center;'><div style='font-size:64px;margin-bottom:16px;'>✅</div><h1 style='margin:0;color:white;font-size:28px;'>האפליקציה שלך מוכנה! 🎉</h1><p style='margin:16px 0 0;color:rgba(255,255,255,0.95);'>הבנייה הושלמה בהצלחה</p></div><div style='padding:40px 32px;'><div style='text-align:center;margin-bottom:32px;'><img src='${ICON_URL}' style='width:100px;height:100px;border-radius:24px;box-shadow:0 8px 24px rgba(0,0,0,0.15);margin-bottom:16px;'/><h2 style='margin:0;color:#1a1a1a;font-size:24px;'>${{ github.event.client_payload.name }}</h2><p style='margin:8px 0 0;color:#666;font-size:14px;'>${{ github.event.client_payload.package_name }}</p></div><div style='background:linear-gradient(135deg,#f8f9fa 0%,#e9ecef 100%);border-radius:16px;padding:24px;margin-bottom:32px;'><table style='width:100%;'><tr><td style='padding:14px 0;border-bottom:1px solid rgba(0,0,0,0.06);'><span style='font-size:20px;margin-left:12px;'>🌐</span><span style='color:#666;font-size:14px;'>כתובת האתר</span></td><td style='padding:14px 0;border-bottom:1px solid rgba(0,0,0,0.06);text-align:left;'><a href='${{ github.event.client_payload.website_url }}' style='color:${PRIMARY_COLOR};text-decoration:none;font-weight:600;font-size:14px;'>${{ github.event.client_payload.website_url }}</a></td></tr><tr><td style='padding:14px 0;'><span style='font-size:20px;margin-left:12px;'>📦</span><span style='color:#666;font-size:14px;'>Package</span></td><td style='padding:14px 0;text-align:left;'><code style='background:white;padding:6px 12px;border-radius:6px;font-size:13px;'>${{ github.event.client_payload.package_name }}</code></td></tr></table></div><div style='text-align:center;margin:40px 0;'><a href='${DOWNLOAD_URL}' style='display:inline-block;background:${PRIMARY_COLOR};color:white;text-decoration:none;padding:18px 56px;border-radius:50px;font-size:18px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,0.2);'>⬇️ הורד ${{ github.event.client_payload.build_format == 'aab' && 'AAB' || 'APK' }}</a></div><div style='background:#ffeef8;padding:24px;border-radius:16px;margin:24px 0;'><h3 style='margin:0 0 16px;color:#1a1a1a;font-size:18px;'>✨ פיצ'רים</h3><div style='text-align:center;'>${FEATURES}</div></div><div style='background:#fff3cd;border-radius:16px;padding:28px;border-left:4px solid #ffc107;'><h3 style='margin:0 0 16px;color:#856404;font-size:18px;'>📖 הוראות התקנה</h3><ol style='margin:0;padding-right:24px;color:#856404;font-size:15px;line-height:2;'><li>הורד את קובץ ה-APK</li><li>פתח את הקובץ</li><li>אשר התקנה</li><li>המתן להתקנה</li><li>תהנה! 🎉</li></ol></div></div><div style='background:linear-gradient(135deg,#2d3748 0%,#1a202c 100%);padding:32px;text-align:center;'><img src='https://res.cloudinary.com/ddsogd7hv/image/upload/v1770576910/Icon2_dvenip.png' style='width:48px;height:48px;border-radius:12px;margin-bottom:16px;'/><p style='margin:0 0 8px;color:white;font-size:16px;'>נבנה ב-<a href='https://web2app-builder.vercel.app/' style='color:#60a5fa;text-decoration:none;font-weight:700;'>Web2App Builder</a></p><p style='margin:0;color:rgba(255,255,255,0.6);font-size:13px;'>הפוך כל אתר לאפליקציה מקצועית</p><div style='margin-top:20px;'><a href='https://web2app-builder.vercel.app/' style='background:rgba(255,255,255,0.1);color:white;text-decoration:none;padding:12px 32px;border-radius:8px;display:inline-block;font-size:14px;'>בקר באתר 🚀</a></div><p style='margin:20px 0 0;color:rgba(255,255,255,0.4);font-size:12px;'>© 2026 Web2App Builder</p></div></div></div></body></html>"
+          
+          # Escape for JSON
+          EMAIL_HTML_ESCAPED=$(echo "$EMAIL_HTML" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr -d '\n')
           
           curl -X POST 'https://api.resend.com/emails' \
             -H "Authorization: Bearer ${{ secrets.RESEND_API_KEY }}" \
             -H 'Content-Type: application/json' \
-            -d '{
-              "from": "App Builder <onboarding@resend.dev>",
-              "to": ["${{ github.event.client_payload.notification_email }}"],
-              "subject": "✅ האפליקציה שלך \"${{ github.event.client_payload.name }}\" מוכנה!",
-              "html": "<div dir=\"rtl\"><h2>האפליקציה שלך מוכנה להורדה!</h2><p><strong>שם:</strong> ${{ github.event.client_payload.name }}</p><p><strong>Package:</strong> ${{ github.event.client_payload.package_name }}</p><p><a href=\"'"${DOWNLOAD_URL}"'\" style=\"background: #2196F3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;\">הורד ${{ github.event.client_payload.build_format == 'aab' && 'AAB' || 'APK' }}</a></p></div>"
-            }'
+            -d "{\"from\":\"Web2App Builder <noreply@web2app-builder.com>\",\"to\":[\"${{ github.event.client_payload.notification_email }}\"],\"subject\":\"🎉 האפליקציה \\\"${{ github.event.client_payload.name }}\\\" שלך מוכנה!\",\"html\":\"${EMAIL_HTML_ESCAPED}\"}"
