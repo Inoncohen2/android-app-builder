@@ -59,10 +59,9 @@ jobs:
 
       - name: Generate Config
         run: |
-          # נקה את ה-URL מקווים תחתונים
-          CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
-    
-          # צור את הקובץ מחדש עם הערכים הנכונים
+          # נקה URL מקווים תחתונים
+          CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          
           cat > lib/app_config.dart << EOF
           class AppConfig {
             static const String appName = '${{ github.event.client_payload.name }}';
@@ -78,9 +77,12 @@ jobs:
             static const bool openExternalLinks = ${{ github.event.client_payload.config.open_external_links }};
           }
           EOF
-    
-          echo "✅ Generated config:"
+          
+          echo "=========================================="
+          echo "Generated app_config.dart:"
+          echo "=========================================="
           cat lib/app_config.dart
+          echo "=========================================="
 
 
       - name: Install Dependencies
