@@ -58,26 +58,46 @@ jobs:
           NAME="${{ github.event.client_payload.name }}"
           sed -i "s/android:label=\".*\"/android:label=\"$NAME\"/" android/app/src/main/AndroidManifest.xml
 
-      - name: Generate Config (HARDCODED FOR TEST)
+      - name: Generate Config
         run: |
-          cat > lib/app_config.dart << 'EOF'
+          # נקה URL מקווים תחתונים
+          CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
+    
+          # ולידציה - ערכי Boolean
+          NAV="${{ github.event.client_payload.config.navigation }}"
+          PTR="${{ github.event.client_payload.config.pull_to_refresh }}"
+          ZOOM="${{ github.event.client_payload.config.enable_zoom }}"
+          AWAKE="${{ github.event.client_payload.config.keep_awake }}"
+          LINKS="${{ github.event.client_payload.config.open_external_links }}"
+    
+          # ברירת מחדל אם ריק
+          [ -z "$NAV" ] && NAV="true"
+          [ -z "$PTR" ] && PTR="true"
+          [ -z "$ZOOM" ] && ZOOM="false"
+          [ -z "$AWAKE" ] && AWAKE="false"
+          [ -z "$LINKS" ] && LINKS="false"
+    
+          cat > lib/app_config.dart << EOF
           class AppConfig {
-            static const String appName = 'Google Test';
-            static const String websiteUrl = 'https://www.google.com';
-            static const String packageName = 'com.test.google99';
-            static const String primaryColor = '#2196F3';
-            static const String themeMode = 'light';
-            static const bool showNavigation = true;
-            static const bool pullToRefresh = true;
-            static const String orientation = 'auto';
-            static const bool enableZoom = true;
-            static const bool keepAwake = false;
-            static const bool openExternalLinks = false;
+            static const String appName = '${{ github.event.client_payload.name }}';
+            static const String websiteUrl = '$CLEAN_URL';
+            static const String packageName = '${{ github.event.client_payload.package_name }}';
+            static const String primaryColor = '${{ github.event.client_payload.config.primary_color }}';
+            static const String themeMode = '${{ github.event.client_payload.config.theme_mode }}';
+            static const bool showNavigation = $NAV;
+            static const bool pullToRefresh = $PTR;
+            static const String orientation = '${{ github.event.client_payload.config.orientation }}';
+           static const bool enableZoom = $ZOOM;
+            static const bool keepAwake = $AWAKE;
+            static const bool openExternalLinks = $LINKS;
           }
           EOF
     
-          echo "✅ Config (HARDCODED):"
+          echo "=========================================="
+          echo "✅ Generated config:"
+          echo "=========================================="
           cat lib/app_config.dart
+          echo "=========================================="
 
 
       - name: Install Dependencies
