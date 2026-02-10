@@ -114,6 +114,39 @@ jobs:
           fi
           echo "BUILD_FILE=$BUILD_FILE" >> $GITHUB_ENV
 
+      - name: Package Source Code
+        if: ${{ github.event.client_payload.build_format == 'source' }}
+        run: |
+          # Clean unnecessary files
+          rm -rf build/
+          rm -rf .gradle/
+          rm -rf .dart_tool/
+    
+          # Create ZIP
+          zip -r android-source.zip . \
+            -x ".git/*" \
+            -x "*.iml" \
+            -x ".idea/*"
+    
+          # Upload to Supabase
+          APP_ID="${{ github.event.client_payload.app_id }}"
+    
+          curl -X POST \
+            "${{ secrets.SUPABASE_URL }}/storage/v1/object/source-code/${APP_ID}.zip" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/zip" \
+            --data-binary @android-source.zip
+    
+          DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/source-code/${APP_ID}.zip"
+    
+          # Update database
+          curl -X PATCH \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${APP_ID}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"source_url\": \"${DOWNLOAD_URL}\"}"
+
       - name: Upload to Supabase
         run: |
           APP_ID="${{ github.event.client_payload.app_id }}"
