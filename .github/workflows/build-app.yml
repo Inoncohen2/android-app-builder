@@ -163,4 +163,4 @@ jobs:
           curl -X POST 'https://api.resend.com/emails' \
             -H "Authorization: Bearer ${{ secrets.RESEND_API_KEY }}" \
             -H 'Content-Type: application/json' \
-            -d "{\"from\":\"Web2App Builder <noreply@web2app-builder.com>\",\"to\":[\"${{ github.event.client_payload.notification_email }}\"],\"subject\":\"🎉 האפליקציה \\\"${{ github.event.client_payload.name }}\\\" שלך מוכנה!\",\"html\":\"${EMAIL_HTML_ESCAPED}\"}"
+            -d "{\"from\":\"Web2App Builder <onboarding@resend.dev>\",\"to\":[\"${{ github.event.client_payload.notification_email }}\"],\"subject\":\"🎉 האפליקציה \\\"${{ github.event.client_payload.name }}\\\" שלך מוכנה! (${{ github.event.client_payload.build_format == 'aab' && 'AAB' || 'APK' }})\",\"html\":\"${EMAIL_HTML_ESCAPED}\"}"
