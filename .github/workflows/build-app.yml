@@ -1,150 +1,332 @@
 name: Build Android APK
 
 on:
-  repository_dispatch:
-    types: [build-app]
+repository_dispatch:
+types: [build-app]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+build:
+runs-on: ubuntu-latest
+timeout-minutes: 30
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
+```
+steps:
+  - name: Checkout
+    uses: actions/checkout@v4
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.19.0'
-          channel: 'stable'
-          cache: true
+  - name: Setup Java
+    uses: actions/setup-java@v4
+    with:
+      distribution: 'zulu'
+      java-version: '17'
 
-      - name: Install ImageMagick
-        run: sudo apt-get update && sudo apt-get install -y imagemagick
+  - name: Setup Flutter
+    uses: subosito/flutter-action@v2
+    with:
+      flutter-version: '3.19.0'
+      channel: 'stable'
+      cache: true
 
-      - name: Download Icon
-        run: |
-          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
-          mkdir -p android/app/src/main/res/mipmap-xxhdpi
-          mkdir -p android/app/src/main/res/mipmap-xhdpi
-          mkdir -p android/app/src/main/res/mipmap-hdpi
-          mkdir -p android/app/src/main/res/mipmap-mdpi
+  - name: Install ImageMagick
+    run: sudo apt-get update && sudo apt-get install -y imagemagick
+
+  - name: Download Icon
+    run: |
+      mkdir -p android/app/src/main/res/mipmap-xxxhdpi
+      mkdir -p android/app/src/main/res/mipmap-xxhdpi
+      mkdir -p android/app/src/main/res/mipmap-xhdpi
+      mkdir -p android/app/src/main/res/mipmap-hdpi
+      mkdir -p android/app/src/main/res/mipmap-mdpi
+      
+      curl -L -o /tmp/icon.png "${{ github.event.client_payload.icon_url }}"
+      
+      convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+      convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+      convert /tmp/icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+      convert /tmp/icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+      convert /tmp/icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+
+  - name: Update Package Name
+    run: |
+      PKG="${{ github.event.client_payload.package_name }}"
+      sed -i "s/package=\".*\"/package=\"$PKG\"/" android/app/src/main/AndroidManifest.xml
+      sed -i "s/namespace \".*\"/namespace \"$PKG\"/" android/app/build.gradle
+      sed -i "s/applicationId \".*\"/applicationId \"$PKG\"/" android/app/build.gradle
+      sed -i "s/^package .*/package $PKG/" android/app/src/main/kotlin/com/example/app/MainActivity.kt
+
+  - name: Update App Name
+    run: |
+      NAME="${{ github.event.client_payload.name }}"
+      sed -i "s/android:label=\".*\"/android:label=\"$NAME\"/" android/app/src/main/AndroidManifest.xml
+
+  - name: Generate Config
+    run: |
+      # נקה URL מקווים תחתונים
+      CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
+
+      # ולידציה - ערכי Boolean
+      NAV="${{ github.event.client_payload.config.navigation }}"
+      PTR="${{ github.event.client_payload.config.pull_to_refresh }}"
+      ZOOM="${{ github.event.client_payload.config.enable_zoom }}"
+      AWAKE="${{ github.event.client_payload.config.keep_awake }}"
+      LINKS="${{ github.event.client_payload.config.open_external_links }}"
+
+      # ברירת מחדל אם ריק
+      [ -z "$NAV" ] && NAV="true"
+      [ -z "$PTR" ] && PTR="true"
+      [ -z "$ZOOM" ] && ZOOM="false"
+      [ -z "$AWAKE" ] && AWAKE="false"
+      [ -z "$LINKS" ] && LINKS="false"
+
+      cat > lib/app_config.dart << EOF
+      class AppConfig {
+        static const String appName = '${{ github.event.client_payload.name }}';
+        static const String websiteUrl = '$CLEAN_URL';
+        static const String packageName = '${{ github.event.client_payload.package_name }}';
+        static const String primaryColor = '${{ github.event.client_payload.config.primary_color }}';
+        static const String themeMode = '${{ github.event.client_payload.config.theme_mode }}';
+        static const bool showNavigation = $NAV;
+        static const bool pullToRefresh = $PTR;
+        static const String orientation = '${{ github.event.client_payload.config.orientation }}';
+       static const bool enableZoom = $ZOOM;
+        static const bool keepAwake = $AWAKE;
+        static const bool openExternalLinks = $LINKS;
+      }
+      EOF
+
+      echo "=========================================="
+      echo "✅ Generated config:"
+      echo "=========================================="
+      cat lib/app_config.dart
+      echo "=========================================="
+
+  - name: Install Dependencies
+    run: flutter pub get
+
+  - name: Build APK
+    run: |
+      if [ "${{ github.event.client_payload.build_format }}" == "aab" ]; then
+        flutter build appbundle --release
+        BUILD_FILE="build/app/outputs/bundle/release/app-release.aab"
+      else
+        flutter build apk --release
+        BUILD_FILE="build/app/outputs/flutter-apk/app-release.apk"
+      fi
+      echo "BUILD_FILE=$BUILD_FILE" >> $GITHUB_ENV
+
+  - name: Upload to Supabase
+    run: |
+      APP_ID="${{ github.event.client_payload.app_id }}"
+      FORMAT="${{ github.event.client_payload.build_format }}"
+      
+      curl -X POST \
+        "${{ secrets.SUPABASE_URL }}/storage/v1/object/builds/${APP_ID}.${FORMAT}" \
+        -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+        -H "Content-Type: application/octet-stream" \
+        --data-binary @"$BUILD_FILE"
+      
+      DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/builds/${APP_ID}.${FORMAT}"
+      
+      curl -X PATCH \
+        "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${APP_ID}" \
+        -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+        -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+        -H "Content-Type: application/json" \
+        -H "Prefer: return=minimal" \
+        -d "{\"status\": \"completed\", \"download_url\": \"${DOWNLOAD_URL}\"}"
+
+  - name: Send Premium Email
+    run: |
+      DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/builds/${{ github.event.client_payload.app_id }}.${{ github.event.client_payload.build_format }}"
+      PRIMARY_COLOR="${{ github.event.client_payload.config.primary_color }}"
+      [ -z "$PRIMARY_COLOR" ] && PRIMARY_COLOR="#2196F3"
+      ICON_URL="${{ github.event.client_payload.icon_url }}"
+      
+      # Build features badges
+      FEATURES=""
+      if [ "${{ github.event.client_payload.config.navigation }}" = "true" ]; then
+        FEATURES="${FEATURES}<span style='display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; margin: 4px; box-shadow: 0 2px 8px rgba(102,126,234,0.3);'>🧭 Navigation</span>"
+      fi
+      if [ "${{ github.event.client_payload.config.pull_to_refresh }}" = "true" ]; then
+        FEATURES="${FEATURES}<span style='display: inline-block; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; margin: 4px; box-shadow: 0 2px 8px rgba(240,147,251,0.3);'>🔄 Pull to Refresh</span>"
+      fi
+      if [ "${{ github.event.client_payload.config.enable_zoom }}" = "true" ]; then
+        FEATURES="${FEATURES}<span style='display: inline-block; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; margin: 4px; box-shadow: 0 2px 8px rgba(79,172,254,0.3);'>🔍 Zoom</span>"
+      fi
+      if [ "${{ github.event.client_payload.config.keep_awake }}" = "true" ]; then
+        FEATURES="${FEATURES}<span style='display: inline-block; background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; margin: 4px; box-shadow: 0 2px 8px rgba(67,233,123,0.3);'>💤 Keep Awake</span>"
+      fi
+      if [ "${{ github.event.client_payload.config.open_external_links }}" = "true" ]; then
+        FEATURES="${FEATURES}<span style='display: inline-block; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; margin: 4px; box-shadow: 0 2px 8px rgba(250,112,154,0.3);'>🔗 External Links</span>"
+      fi
+      
+      # Create stunning email HTML
+      EMAIL_HTML="<!DOCTYPE html>
+      <html dir='rtl' lang='he'>
+      <head>
+        <meta charset='UTF-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+      </head>
+      <body style='margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);'>
+        
+        <!-- Main Container -->
+        <div style='max-width: 650px; margin: 40px auto; padding: 0 20px;'>
           
-          curl -L -o /tmp/icon.png "${{ github.event.client_payload.icon_url }}"
-          
-          convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-          convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          convert /tmp/icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          convert /tmp/icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
-          convert /tmp/icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+          <!-- Web2App Logo Header -->
+          <div style='text-align: center; margin-bottom: 24px;'>
+            <img src='https://res.cloudinary.com/ddsogd7hv/image/upload/v1770576910/Icon2_dvenip.png' alt='Web2App' style='width: 80px; height: 80px; border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);' />
+            <div style='margin-top: 12px;'>
+              <a href='https://web2app-builder.vercel.app/' style='color: white; text-decoration: none; font-size: 24px; font-weight: 700; text-shadow: 0 2px 8px rgba(0,0,0,0.2);'>Web2App Builder</a>
+            </div>
+          </div>
 
-      - name: Update Package Name
-        run: |
-          PKG="${{ github.event.client_payload.package_name }}"
-          sed -i "s/package=\".*\"/package=\"$PKG\"/" android/app/src/main/AndroidManifest.xml
-          sed -i "s/namespace \".*\"/namespace \"$PKG\"/" android/app/build.gradle
-          sed -i "s/applicationId \".*\"/applicationId \"$PKG\"/" android/app/build.gradle
-          sed -i "s/^package .*/package $PKG/" android/app/src/main/kotlin/com/example/app/MainActivity.kt
+          <!-- Main Card -->
+          <div style='background: white; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3);'>
+            
+            <!-- Success Banner -->
+            <div style='background: linear-gradient(135deg, ${PRIMARY_COLOR} 0%, ${PRIMARY_COLOR}dd 100%); padding: 48px 32px; text-align: center; position: relative; overflow: hidden;'>
+              <div style='position: absolute; top: -50px; right: -50px; width: 200px; height: 200px; background: rgba(255,255,255,0.1); border-radius: 50%;'></div>
+              <div style='position: absolute; bottom: -30px; left: -30px; width: 150px; height: 150px; background: rgba(255,255,255,0.1); border-radius: 50%;'></div>
+              
+              <div style='position: relative; z-index: 1;'>
+                <div style='display: inline-block; background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); padding: 16px; border-radius: 50%; margin-bottom: 20px;'>
+                  <svg width='48' height='48' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'>
+                    <path d='M9 11L12 14L22 4' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/>
+                    <path d='M21 12V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H16' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/>
+                  </svg>
+                </div>
+                <h1 style='margin: 0; color: white; font-size: 32px; font-weight: 800; line-height: 1.2;'>האפליקציה שלך<br/>מוכנה להורדה! 🎉</h1>
+                <p style='margin: 16px 0 0; color: rgba(255,255,255,0.95); font-size: 16px; font-weight: 500;'>הבנייה הושלמה בהצלחה</p>
+              </div>
+            </div>
 
-      - name: Update App Name
-        run: |
-          NAME="${{ github.event.client_payload.name }}"
-          sed -i "s/android:label=\".*\"/android:label=\"$NAME\"/" android/app/src/main/AndroidManifest.xml
+            <!-- App Preview Card -->
+            <div style='padding: 40px 32px;'>
+              
+              <!-- App Icon & Name -->
+              <div style='text-align: center; margin-bottom: 32px;'>
+                <img src='${ICON_URL}' alt='App Icon' style='width: 100px; height: 100px; border-radius: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); margin-bottom: 16px;' />
+                <h2 style='margin: 0; color: #1a1a1a; font-size: 24px; font-weight: 700;'>${{ github.event.client_payload.name }}</h2>
+                <p style='margin: 8px 0 0; color: #666; font-size: 14px;'>${{ github.event.client_payload.package_name }}</p>
+              </div>
 
-      - name: Generate Config
-        run: |
-          # נקה URL מקווים תחתונים
-          CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
-    
-          # ולידציה - ערכי Boolean
-          NAV="${{ github.event.client_payload.config.navigation }}"
-          PTR="${{ github.event.client_payload.config.pull_to_refresh }}"
-          ZOOM="${{ github.event.client_payload.config.enable_zoom }}"
-          AWAKE="${{ github.event.client_payload.config.keep_awake }}"
-          LINKS="${{ github.event.client_payload.config.open_external_links }}"
-    
-          # ברירת מחדל אם ריק
-          [ -z "$NAV" ] && NAV="true"
-          [ -z "$PTR" ] && PTR="true"
-          [ -z "$ZOOM" ] && ZOOM="false"
-          [ -z "$AWAKE" ] && AWAKE="false"
-          [ -z "$LINKS" ] && LINKS="false"
-    
-          cat > lib/app_config.dart << EOF
-          class AppConfig {
-            static const String appName = '${{ github.event.client_payload.name }}';
-            static const String websiteUrl = '$CLEAN_URL';
-            static const String packageName = '${{ github.event.client_payload.package_name }}';
-            static const String primaryColor = '${{ github.event.client_payload.config.primary_color }}';
-            static const String themeMode = '${{ github.event.client_payload.config.theme_mode }}';
-            static const bool showNavigation = $NAV;
-            static const bool pullToRefresh = $PTR;
-            static const String orientation = '${{ github.event.client_payload.config.orientation }}';
-           static const bool enableZoom = $ZOOM;
-            static const bool keepAwake = $AWAKE;
-            static const bool openExternalLinks = $LINKS;
-          }
-          EOF
-    
-          echo "=========================================="
-          echo "✅ Generated config:"
-          echo "=========================================="
-          cat lib/app_config.dart
-          echo "=========================================="
+              <!-- App Details -->
+              <div style='background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 16px; padding: 24px; margin-bottom: 32px; border: 1px solid #e0e0e0;'>
+                <table style='width: 100%; border-collapse: collapse;'>
+                  <tr>
+                    <td style='padding: 14px 0; border-bottom: 1px solid rgba(0,0,0,0.06);'>
+                      <div style='display: flex; align-items: center;'>
+                        <span style='font-size: 20px; margin-left: 12px;'>🌐</span>
+                        <span style='color: #666; font-size: 14px; font-weight: 500;'>כתובת האתר</span>
+                      </div>
+                    </td>
+                    <td style='padding: 14px 0; border-bottom: 1px solid rgba(0,0,0,0.06); text-align: left;'>
+                      <a href='${{ github.event.client_payload.website_url }}' style='color: ${PRIMARY_COLOR}; text-decoration: none; font-weight: 600; font-size: 14px;'>${{ github.event.client_payload.website_url }}</a>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style='padding: 14px 0; border-bottom: 1px solid rgba(0,0,0,0.06);'>
+                      <div style='display: flex; align-items: center;'>
+                        <span style='font-size: 20px; margin-left: 12px;'>📦</span>
+                        <span style='color: #666; font-size: 14px; font-weight: 500;'>Package Name</span>
+                      </div>
+                    </td>
+                    <td style='padding: 14px 0; border-bottom: 1px solid rgba(0,0,0,0.06); text-align: left;'>
+                      <code style='background: white; padding: 6px 12px; border-radius: 6px; font-size: 13px; color: #495057; border: 1px solid #dee2e6; font-family: \"Courier New\", monospace;'>${{ github.event.client_payload.package_name }}</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style='padding: 14px 0;'>
+                      <div style='display: flex; align-items: center;'>
+                        <span style='font-size: 20px; margin-left: 12px;'>🎨</span>
+                        <span style='color: #666; font-size: 14px; font-weight: 500;'>צבע ראשי</span>
+                      </div>
+                    </td>
+                    <td style='padding: 14px 0; text-align: left;'>
+                      <div style='display: inline-flex; align-items: center; gap: 8px;'>
+                        <div style='width: 24px; height: 24px; background: ${PRIMARY_COLOR}; border-radius: 6px; border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.15);'></div>
+                        <code style='font-size: 13px; color: #666; font-family: \"Courier New\", monospace;'>${PRIMARY_COLOR}</code>
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </div>
 
+              <!-- Download Button -->
+              <div style='text-align: center; margin: 40px 0;'>
+                <a href='${DOWNLOAD_URL}' style='display: inline-block; background: linear-gradient(135deg, ${PRIMARY_COLOR} 0%, ${PRIMARY_COLOR}dd 100%); color: white; text-decoration: none; padding: 18px 56px; border-radius: 50px; font-size: 18px; font-weight: 700; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: transform 0.2s;'>
+                  <span style='margin-left: 8px;'>⬇️</span>
+                  הורד ${{ github.event.client_payload.build_format == 'aab' && 'AAB' || 'APK' }}
+                </a>
+                <p style='margin: 16px 0 0; color: #999; font-size: 13px;'>גודל הקובץ: ~15MB</p>
+              </div>
 
-      - name: Install Dependencies
-        run: flutter pub get
+              <!-- Features Section -->
+              <div style='margin: 40px 0; padding: 24px; background: linear-gradient(135deg, #ffeef8 0%, #e0f7ff 100%); border-radius: 16px; border: 1px solid rgba(0,0,0,0.05);'>
+                <h3 style='margin: 0 0 20px; color: #1a1a1a; font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px;'>
+                  <span>✨</span>
+                  פיצ'רים מתקדמים
+                </h3>
+                <div style='text-align: center; line-height: 2;'>
+                  ${FEATURES}
+                </div>
+              </div>
 
-      - name: Build APK
-        run: |
-          if [ "${{ github.event.client_payload.build_format }}" == "aab" ]; then
-            flutter build appbundle --release
-            BUILD_FILE="build/app/outputs/bundle/release/app-release.aab"
-          else
-            flutter build apk --release
-            BUILD_FILE="build/app/outputs/flutter-apk/app-release.apk"
-          fi
-          echo "BUILD_FILE=$BUILD_FILE" >> $GITHUB_ENV
+              <!-- Installation Guide -->
+              <div style='background: linear-gradient(135deg, #fff3cd 0%, #ffe8a1 100%); border-radius: 16px; padding: 28px; border-left: 4px solid #ffc107;'>
+                <h3 style='margin: 0 0 16px; color: #856404; font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px;'>
+                  <span>📖</span>
+                  הוראות התקנה מהירות
+                </h3>
+                <ol style='margin: 0; padding-right: 24px; color: #856404; font-size: 15px; line-height: 2;'>
+                  <li><strong>הורד</strong> את קובץ ה-APK למכשיר</li>
+                  <li><strong>פתח</strong> את הקובץ שהורדת</li>
+                  <li><strong>אשר</strong> התקנה מ\"מקורות לא ידועים\"</li>
+                  <li><strong>המתן</strong> להתקנה (כ-30 שניות)</li>
+                  <li><strong>פתח</strong> את האפליקציה ותהנה! 🎉</li>
+                </ol>
+              </div>
 
-      - name: Upload to Supabase
-        run: |
-          APP_ID="${{ github.event.client_payload.app_id }}"
-          FORMAT="${{ github.event.client_payload.build_format }}"
-          
-          curl -X POST \
-            "${{ secrets.SUPABASE_URL }}/storage/v1/object/builds/${APP_ID}.${FORMAT}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
-            -H "Content-Type: application/octet-stream" \
-            --data-binary @"$BUILD_FILE"
-          
-          DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/builds/${APP_ID}.${FORMAT}"
-          
-          curl -X PATCH \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${APP_ID}" \
-            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
-            -H "Content-Type: application/json" \
-            -H "Prefer: return=minimal" \
-            -d "{\"status\": \"completed\", \"download_url\": \"${DOWNLOAD_URL}\"}"
+            </div>
 
-      - name: Send Email
-        run: |
-          DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/builds/${{ github.event.client_payload.app_id }}.${{ github.event.client_payload.build_format }}"
-          
-          curl -X POST 'https://api.resend.com/emails' \
-            -H "Authorization: Bearer ${{ secrets.RESEND_API_KEY }}" \
-            -H 'Content-Type: application/json' \
-            -d '{
-              "from": "App Builder <onboarding@resend.dev>",
-              "to": ["${{ github.event.client_payload.notification_email }}"],
-              "subject": "✅ האפליקציה שלך \"${{ github.event.client_payload.name }}\" מוכנה!",
-              "html": "<div dir=\"rtl\"><h2>האפליקציה שלך מוכנה להורדה!</h2><p><strong>שם:</strong> ${{ github.event.client_payload.name }}</p><p><strong>Package:</strong> ${{ github.event.client_payload.package_name }}</p><p><a href=\"'"${DOWNLOAD_URL}"'\" style=\"background: #2196F3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;\">הורד ${{ github.event.client_payload.build_format == 'aab' && 'AAB' || 'APK' }}</a></p></div>"
-            }'
+            <!-- Tech Footer -->
+            <div style='background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%); padding: 32px; text-align: center;'>
+              <div style='margin-bottom: 16px;'>
+                <img src='https://res.cloudinary.com/ddsogd7hv/image/upload/v1770576910/Icon2_dvenip.png' alt='Web2App' style='width: 48px; height: 48px; border-radius: 12px;' />
+              </div>
+              <p style='margin: 0 0 8px; color: white; font-size: 16px; font-weight: 600;'>
+                נבנה באמצעות 
+                <a href='https://web2app-builder.vercel.app/' style='color: #60a5fa; text-decoration: none; font-weight: 700;'>Web2App Builder</a>
+              </p>
+              <p style='margin: 0; color: rgba(255,255,255,0.6); font-size: 13px;'>
+                הפוך כל אתר לאפליקציית Android מקצועית בקלות
+              </p>
+              <div style='margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);'>
+                <a href='https://web2app-builder.vercel.app/' style='display: inline-block; background: rgba(255,255,255,0.1); color: white; text-decoration: none; padding: 12px 32px; border-radius: 8px; font-size: 14px; font-weight: 600; backdrop-filter: blur(10px);'>
+                  בקר באתר שלנו 🚀
+                </a>
+              </div>
+              <p style='margin: 20px 0 0; color: rgba(255,255,255,0.4); font-size: 12px;'>
+                מייל זה נשלח אוטומטית מ-GitHub Actions<br/>
+                © 2026 Web2App Builder. All rights reserved.
+              </p>
+            </div>
+
+          </div>
+        </div>
+      </body>
+      </html>"
+      
+      # Escape for JSON
+      EMAIL_HTML_ESCAPED=$(echo "$EMAIL_HTML" | sed 's/"/\\"/g' | tr -d '\n')
+      
+      curl -X POST 'https://api.resend.com/emails' \
+        -H "Authorization: Bearer ${{ secrets.RESEND_API_KEY }}" \
+        -H 'Content-Type: application/json' \
+        -d "{
+          \"from\": \"Web2App Builder <noreply@web2app-builder.com>\",
+          \"to\": [\"${{ github.event.client_payload.notification_email }}\"],
+          \"subject\": \"🎉 האפליקציה \\\"${{ github.event.client_payload.name }}\\\" שלך מוכנה להורדה!\",
+          \"html\": \"${EMAIL_HTML_ESCAPED}\"
+        }"
+```
