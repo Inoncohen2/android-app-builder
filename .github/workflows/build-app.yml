@@ -62,7 +62,7 @@ jobs:
           cat > lib/app_config.dart << 'EOF'
           class AppConfig {
             static const String appName = '${{ github.event.client_payload.name }}';
-            static const String websiteUrl = '${{ github.event.client_payload.website_url }}';
+            static const String websiteUrl = '$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g')';
             static const String packageName = '${{ github.event.client_payload.package_name }}';
             static const String primaryColor = '${{ github.event.client_payload.config.primary_color }}';
             static const String themeMode = '${{ github.event.client_payload.config.theme_mode }}';
