@@ -51,6 +51,7 @@ jobs:
           sed -i "s/package=\".*\"/package=\"$PKG\"/" android/app/src/main/AndroidManifest.xml
           sed -i "s/namespace \".*\"/namespace \"$PKG\"/" android/app/build.gradle
           sed -i "s/applicationId \".*\"/applicationId \"$PKG\"/" android/app/build.gradle
+          sed -i "s/^package .*/package $PKG/" android/app/src/main/kotlin/com/example/app/MainActivity.kt
 
       - name: Update App Name
         run: |
