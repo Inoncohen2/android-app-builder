@@ -57,32 +57,26 @@ jobs:
           NAME="${{ github.event.client_payload.name }}"
           sed -i "s/android:label=\".*\"/android:label=\"$NAME\"/" android/app/src/main/AndroidManifest.xml
 
-      - name: Generate Config
+      - name: Generate Config (HARDCODED FOR TEST)
         run: |
-          # נקה URL מקווים תחתונים
-          CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-          
-          cat > lib/app_config.dart << EOF
+          cat > lib/app_config.dart << 'EOF'
           class AppConfig {
-            static const String appName = '${{ github.event.client_payload.name }}';
-            static const String websiteUrl = '$CLEAN_URL';
-            static const String packageName = '${{ github.event.client_payload.package_name }}';
-            static const String primaryColor = '${{ github.event.client_payload.config.primary_color }}';
-            static const String themeMode = '${{ github.event.client_payload.config.theme_mode }}';
-            static const bool showNavigation = ${{ github.event.client_payload.config.navigation }};
-            static const bool pullToRefresh = ${{ github.event.client_payload.config.pull_to_refresh }};
-            static const String orientation = '${{ github.event.client_payload.config.orientation }}';
-            static const bool enableZoom = ${{ github.event.client_payload.config.enable_zoom }};
-            static const bool keepAwake = ${{ github.event.client_payload.config.keep_awake }};
-            static const bool openExternalLinks = ${{ github.event.client_payload.config.open_external_links }};
+            static const String appName = 'Google Test';
+            static const String websiteUrl = 'https://www.google.com';
+            static const String packageName = 'com.test.google99';
+            static const String primaryColor = '#2196F3';
+            static const String themeMode = 'light';
+            static const bool showNavigation = true;
+            static const bool pullToRefresh = true;
+            static const String orientation = 'auto';
+            static const bool enableZoom = true;
+            static const bool keepAwake = false;
+            static const bool openExternalLinks = false;
           }
           EOF
-          
-          echo "=========================================="
-          echo "Generated app_config.dart:"
-          echo "=========================================="
+    
+          echo "✅ Config (HARDCODED):"
           cat lib/app_config.dart
-          echo "=========================================="
 
 
       - name: Install Dependencies
