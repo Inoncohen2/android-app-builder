@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert'; // ✅ הוספנו את השורה הזו כדי לתקן את בעיית ה-jsonEncode
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -79,18 +80,11 @@ class LocationBridge {
       // Get accuracy settings
       final highAccuracy = params['enableHighAccuracy'] as bool? ?? true;
       final timeout = params['timeout'] as int? ?? 30000;
-      final maximumAge = params['maximumAge'] as int? ?? 0;
 
-      // Set location settings
-      final LocationSettings locationSettings = LocationSettings(
-        accuracy: highAccuracy ? LocationAccuracy.best : LocationAccuracy.medium,
-        distanceFilter: 0,
-        timeLimit: Duration(milliseconds: timeout),
-      );
-
-      // Get position
+      // ✅ תוקן! שימוש ב-desiredAccuracy במקום locationSettings שגרם לשגיאה
       final Position position = await Geolocator.getCurrentPosition(
-        locationSettings: locationSettings,
+        desiredAccuracy: highAccuracy ? LocationAccuracy.best : LocationAccuracy.medium,
+        timeLimit: Duration(milliseconds: timeout),
       );
 
       return {
