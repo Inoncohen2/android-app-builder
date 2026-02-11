@@ -303,10 +303,19 @@ class _WebViewScreenState extends State<WebViewScreen> {
               title: Text(AppConfig.appName),
               actions: [
                 IconButton(
+                  icon: Icon(Icons.settings),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => SettingsScreen()),
+                    );
+                  },
+                ),
+                IconButton(
                   icon: Icon(Icons.refresh),
                   onPressed: _refresh,
                 ),
-              ],
+              ],   
             )
           : null,
       body: Stack(
