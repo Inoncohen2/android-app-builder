@@ -13,17 +13,31 @@ dependencies:
   # WebView
   webview_flutter: ^4.7.0
   
-  # Utilities
+  # Basic Utilities
   wakelock_plus: ^1.1.4
   url_launcher: ^6.2.3
   
-  # ✅ NEW - JavaScript Bridge Dependencies
+  # ✅ JavaScript Bridge - Basic APIs
   share_plus: ^7.2.1            # Share functionality
   vibration: ^1.8.4             # Haptic feedback
   device_info_plus: ^9.1.1      # Device information
   package_info_plus: ^5.0.1     # App information
   
-  # Splash Screen
+  # ✅ Camera & Gallery APIs
+  image_picker: ^1.0.7          # Camera & Gallery picker
+  flutter_image_compress: ^2.1.0 # Image compression
+  path_provider: ^2.1.2         # File storage paths
+  
+  # ✅ Location & GPS APIs
+  geolocator: ^10.1.0           # GPS Location
+  
+  # ✅ Scanner APIs
+  mobile_scanner: ^3.5.5        # Barcode/QR Scanner
+  
+  # ✅ Permissions
+  permission_handler: ^11.2.0   # Permission management
+  
+  # Splash Screen (optional)
   flutter_native_splash: ^2.3.9  
 
 dev_dependencies:
