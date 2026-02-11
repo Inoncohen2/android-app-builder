@@ -8,20 +8,32 @@ import 'app_config.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // קביעת כיוון מסך
-  if (AppConfig.orientation == 'portrait') {
+  // ✅ קביעת כיוון מסך לפי ההגדרות
+  _setOrientation(AppConfig.orientation);
+  
+  runApp(MyApp());
+}
+
+void _setOrientation(String orientation) {
+  if (orientation == 'portrait') {
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
-  } else if (AppConfig.orientation == 'landscape') {
+  } else if (orientation == 'landscape') {
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
+  } else {
+    // 'auto' - allow all orientations
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
   }
-  
-  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -33,7 +45,9 @@ class MyApp extends StatelessWidget {
       theme: _buildTheme(Brightness.light),
       darkTheme: _buildTheme(Brightness.dark),
       themeMode: _getThemeMode(),
-      home: WebViewScreen(),
+      home: AppConfig.splashScreen 
+          ? SplashScreen() 
+          : WebViewScreen(),
     );
   }
 
@@ -75,6 +89,72 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// ✅ Splash Screen (if enabled)
+class SplashScreen extends StatefulWidget {
+  @override
+  _SplashScreenState createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  @override
+  void initState() {
+    super.initState();
+    
+    // Show splash for 2 seconds
+    Future.delayed(Duration(seconds: 2), () {
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => WebViewScreen()),
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryColor = _parseColor(AppConfig.primaryColor);
+    
+    return Scaffold(
+      backgroundColor: primaryColor,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // App icon would go here
+            Icon(
+              Icons.web,
+              size: 100,
+              color: Colors.white,
+            ),
+            SizedBox(height: 20),
+            Text(
+              AppConfig.appName,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            SizedBox(height: 40),
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _parseColor(String hexColor) {
+    hexColor = hexColor.replaceAll('#', '');
+    if (hexColor.length == 6) {
+      hexColor = 'FF$hexColor';
+    }
+    return Color(int.parse(hexColor, radix: 16));
+  }
+}
+
+// ✅ Main WebView Screen
 class WebViewScreen extends StatefulWidget {
   @override
   _WebViewScreenState createState() => _WebViewScreenState();
@@ -90,6 +170,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
   void initState() {
     super.initState();
     
+    // ✅ Keep screen awake (if enabled)
     if (AppConfig.keepAwake) {
       WakelockPlus.enable();
     }
@@ -102,7 +183,6 @@ class _WebViewScreenState extends State<WebViewScreen> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.white)
       
-      // User Agent מלא לתמיכה באתרים מודרניים
       ..setUserAgent(
         'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36'
       )
@@ -124,19 +204,10 @@ class _WebViewScreenState extends State<WebViewScreen> {
             if (mounted) {
               setState(() => _isLoading = false);
             }
-            
-            // תמיכה ב-PWA - הזרק JavaScript
-            _controller.runJavaScript('''
-              console.log('WebView initialized');
-              if ('serviceWorker' in navigator) {
-                console.log('Service Worker API available');
-              }
-            ''');
           },
           
           onWebResourceError: (error) {
             print('❌ Error: ${error.description}');
-            // רק אם זו שגיאה קריטית
             if (error.errorType == WebResourceErrorType.hostLookup ||
                 error.errorType == WebResourceErrorType.connect ||
                 error.errorType == WebResourceErrorType.timeout) {
@@ -157,33 +228,36 @@ class _WebViewScreenState extends State<WebViewScreen> {
           onNavigationRequest: (request) {
             print('📍 Navigating to: ${request.url}');
             
-            // אפשר navigations באותו domain
             final requestUri = Uri.parse(request.url);
             final baseUri = Uri.parse(AppConfig.websiteUrl);
             
-            // אם זה subdomain או אותו domain - אפשר תמיד
+            // Same domain or subdomain - allow
             if (requestUri.host == baseUri.host || 
                 requestUri.host.endsWith('.${baseUri.host}')) {
               return NavigationDecision.navigate;
             }
             
-            // קישורים חיצוניים
-            if (!AppConfig.openExternalLinks) {
+            // ✅ External links handling (based on config)
+            if (AppConfig.openExternalLinks) {
+              // Open in app
+              return NavigationDecision.navigate;
+            } else {
+              // Open in external browser
               _launchURL(request.url);
               return NavigationDecision.prevent;
             }
-            
-            return NavigationDecision.navigate;
           },
         ),
       );
 
-    // הפעל zoom אם צריך
+    // ✅ Enable zoom (if configured)
     if (AppConfig.enableZoom) {
       _controller.enableZoom(true);
+    } else {
+      _controller.enableZoom(false);
     }
 
-    // טען את האתר
+    // Load website
     _controller.loadRequest(
       Uri.parse(AppConfig.websiteUrl),
       headers: {
@@ -194,6 +268,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
 
   @override
   void dispose() {
+    // ✅ Disable wakelock when leaving
     if (AppConfig.keepAwake) {
       WakelockPlus.disable();
     }
@@ -222,6 +297,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // ✅ Show navigation bar (if enabled)
       appBar: AppConfig.showNavigation
           ? AppBar(
               title: Text(AppConfig.appName),
@@ -236,69 +312,85 @@ class _WebViewScreenState extends State<WebViewScreen> {
       body: Stack(
         children: [
           if (_hasError)
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline, size: 64, color: Colors.red),
-                  SizedBox(height: 16),
-                  Text(
-                    'Oops! Something went wrong',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 8),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 32),
-                    child: Text(
-                      _errorMessage,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    AppConfig.websiteUrl,
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                  SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _hasError = false;
-                        _isLoading = true;
-                      });
-                      _controller.reload();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _parseColor(AppConfig.primaryColor),
-                    ),
-                    child: Text('Retry', style: TextStyle(color: Colors.white)),
-                  ),
-                ],
-              ),
-            )
+            _buildErrorView()
           else
-            AppConfig.pullToRefresh
-                ? RefreshIndicator(
-                    onRefresh: _refresh,
-                    child: WebViewWidget(controller: _controller),
-                  )
-                : WebViewWidget(controller: _controller),
+            _buildWebView(),
           if (_isLoading && !_hasError)
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      _parseColor(AppConfig.primaryColor),
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  Text('Loading...'),
-                ],
-              ),
+            _buildLoadingIndicator(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebView() {
+    // ✅ Pull to refresh (if enabled)
+    if (AppConfig.pullToRefresh) {
+      return RefreshIndicator(
+        onRefresh: _refresh,
+        color: _parseColor(AppConfig.primaryColor),
+        child: WebViewWidget(controller: _controller),
+      );
+    } else {
+      return WebViewWidget(controller: _controller);
+    }
+  }
+
+  Widget _buildErrorView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 64, color: Colors.red),
+          SizedBox(height: 16),
+          Text(
+            'Oops! Something went wrong',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 8),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              _errorMessage,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600]),
             ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            AppConfig.websiteUrl,
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _hasError = false;
+                _isLoading = true;
+              });
+              _controller.reload();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _parseColor(AppConfig.primaryColor),
+            ),
+            child: Text('Retry', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(
+              _parseColor(AppConfig.primaryColor),
+            ),
+          ),
+          SizedBox(height: 16),
+          Text('Loading...'),
         ],
       ),
     );
