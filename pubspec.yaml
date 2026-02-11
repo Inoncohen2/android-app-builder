@@ -12,6 +12,7 @@ dependencies:
   webview_flutter: ^4.7.0
   wakelock_plus: ^1.1.4
   url_launcher: ^6.2.3
+  flutter_native_splash: ^2.3.9  
 
 dev_dependencies:
   flutter_test:
@@ -20,3 +21,12 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/  
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  color_dark: "#000000"
+  image: assets/splash.png
+  android: true
+  ios: false
