@@ -171,16 +171,17 @@ jobs:
           done
           
           # Generate config file
-          cat > lib/app_config.dart << 'EOF'
+          cat > lib/app_config.dart << EOF
           class AppConfig {
+            // App Identity
             static const String appName = '${{ github.event.client_payload.name }}';
             static const String websiteUrl = '${CLEAN_URL}';
             static const String packageName = '${{ github.event.client_payload.package_name }}';
-          
-             // Appearance
+  
+            // Appearance
             static const String primaryColor = '${PRIMARY}';
-            static const String themeMode = '${THEME}'; // 'light', 'dark', 'auto'
-            static const String orientation = '${ORIENT}'; // 'portrait', 'landscape', 'auto'
+            static const String themeMode = '${THEME}';
+            static const String orientation = '${ORIENT}';
   
             // Features
             static const bool showNavigation = ${NAV};
@@ -189,8 +190,8 @@ jobs:
             static const bool enableZoom = ${ZOOM};
             static const bool keepAwake = ${AWAKE};
             static const bool openExternalLinks = ${LINKS};
-                    }
-                    EOF 
+          }
+          EOF
           
           # Replace variables
           sed -i "s|\${CLEAN_URL}|${CLEAN_URL}|g" lib/app_config.dart
