@@ -5,6 +5,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_config.dart';
 import 'settings_screen.dart';
+import 'javascript_bridge.dart';  // ✅ NEW!
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -163,6 +164,8 @@ class WebViewScreen extends StatefulWidget {
 
 class _WebViewScreenState extends State<WebViewScreen> {
   late final WebViewController _controller;
+  late final JavaScriptBridge _bridge;  // ✅ NEW!
+  
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
@@ -205,7 +208,12 @@ class _WebViewScreenState extends State<WebViewScreen> {
             if (mounted) {
               setState(() => _isLoading = false);
             }
+            
+            // ✅ NEW - Initialize JavaScript Bridge after page loads
+            _bridge = JavaScriptBridge(_controller, context);
+            _bridge.initialize();
           },
+          
           onWebResourceError: (error) {
             print('❌ Error: ${error.description}');
   
