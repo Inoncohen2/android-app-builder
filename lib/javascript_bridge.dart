@@ -7,11 +7,25 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:io';
 
+// Import new bridges
+import 'camera_bridge.dart';
+import 'location_bridge.dart';
+import 'scanner_bridge.dart';
+
 class JavaScriptBridge {
   final WebViewController controller;
   final BuildContext context;
+  
+  // Bridge instances
+  late final CameraBridge _cameraBridge;
+  late final LocationBridge _locationBridge;
+  late final ScannerBridge _scannerBridge;
 
-  JavaScriptBridge(this.controller, this.context);
+  JavaScriptBridge(this.controller, this.context) {
+    _cameraBridge = CameraBridge(controller, context);
+    _locationBridge = LocationBridge(controller, context);
+    _scannerBridge = ScannerBridge(controller, context);
+  }
 
   /// Initialize the JavaScript bridge
   void initialize() {
@@ -31,11 +45,10 @@ class JavaScriptBridge {
     print('✅ JavaScript Bridge initialized!');
   }
 
-  /// Inject the median JavaScript API into the page
+  /// Inject the complete Web2App JavaScript API
   Future<void> _injectBridgeScript() async {
     final script = '''
       (function() {
-        // Only initialize once
         if (typeof window.web2app !== 'undefined') {
           console.log('✅ Web2App bridge already initialized');
           return;
@@ -43,25 +56,20 @@ class JavaScriptBridge {
         
         console.log('🌉 Initializing Web2App JavaScript Bridge...');
         
-        // Create web2app object
         window.web2app = {
           _callbacks: {},
           _callbackId: 0,
+          _positionWatchers: {},
           
-          // Internal: Generate unique callback ID
           _getCallbackId: function() {
             return 'cb_' + Date.now() + '_' + (++this._callbackId);
           },
           
-          // Internal: Send message to native
           _send: function(command, data) {
             return new Promise((resolve, reject) => {
               const callbackId = this._getCallbackId();
-              
-              // Store callbacks
               this._callbacks[callbackId] = { resolve, reject };
               
-              // Timeout after 30 seconds
               setTimeout(() => {
                 if (this._callbacks[callbackId]) {
                   this._callbacks[callbackId].reject(new Error('Timeout'));
@@ -69,7 +77,6 @@ class JavaScriptBridge {
                 }
               }, 30000);
               
-              // Send to native
               const message = JSON.stringify({
                 command: command,
                 data: data || {},
@@ -85,7 +92,6 @@ class JavaScriptBridge {
             });
           },
           
-          // Internal: Handle response from native
           _handleResponse: function(callbackId, result, error) {
             const callback = this._callbacks[callbackId];
             if (callback) {
@@ -99,17 +105,9 @@ class JavaScriptBridge {
           },
           
           // ═══════════════════════════════════════════
-          // PUBLIC API
+          // BASIC APIs
           // ═══════════════════════════════════════════
           
-          /**
-           * Share text, URL, or content
-           * @param {Object} options - Share options
-           * @param {string} options.text - Text to share
-           * @param {string} [options.subject] - Subject line
-           * @param {string} [options.url] - URL to share
-           * @returns {Promise<Object>} Result
-           */
           share: function(options) {
             if (!options || !options.text) {
               return Promise.reject(new Error('Text is required'));
@@ -117,50 +115,18 @@ class JavaScriptBridge {
             return this._send('share', options);
           },
           
-          /**
-           * Vibrate the device
-           * @param {Object} [options] - Vibration options
-           * @param {number} [options.duration=100] - Duration in milliseconds
-           * @param {number[]} [options.pattern] - Vibration pattern [wait, vibrate, wait, vibrate]
-           * @returns {Promise<Object>} Result
-           */
           vibrate: function(options) {
             return this._send('vibrate', options || { duration: 100 });
           },
           
-          /**
-           * Get device information
-           * @returns {Promise<Object>} Device info
-           */
           getDeviceInfo: function() {
             return this._send('getDeviceInfo', {});
           },
           
-          /**
-           * Get app information
-           * @returns {Promise<Object>} App info
-           */
           getAppInfo: function() {
             return this._send('getAppInfo', {});
           },
           
-          /**
-           * Open URL in external browser
-           * @param {string} url - URL to open
-           * @returns {Promise<Object>} Result
-           */
-          openExternal: function(url) {
-            if (!url) {
-              return Promise.reject(new Error('URL is required'));
-            }
-            return this._send('openExternal', { url: url });
-          },
-          
-          /**
-           * Show native toast message
-           * @param {string} message - Message to show
-           * @returns {Promise<Object>} Result
-           */
           toast: function(message) {
             if (!message) {
               return Promise.reject(new Error('Message is required'));
@@ -168,7 +134,141 @@ class JavaScriptBridge {
             return this._send('toast', { message: message });
           },
           
-          // Status Bar API
+          openExternal: function(url) {
+            if (!url) {
+              return Promise.reject(new Error('URL is required'));
+            }
+            return this._send('openExternal', { url: url });
+          },
+          
+          // ═══════════════════════════════════════════
+          // CAMERA API
+          // ═══════════════════════════════════════════
+          
+          camera: {
+            takePicture: function(options) {
+              return window.web2app._send('camera.takePicture', options || {});
+            },
+            
+            pickFromGallery: function(options) {
+              return window.web2app._send('camera.pickFromGallery', options || {});
+            },
+            
+            pickMultiple: function(options) {
+              return window.web2app._send('camera.pickMultiple', options || {});
+            },
+            
+            compressImage: function(options) {
+              if (!options || (!options.path && !options.image)) {
+                return Promise.reject(new Error('path or image is required'));
+              }
+              return window.web2app._send('camera.compressImage', options);
+            },
+            
+            checkPermission: function() {
+              return window.web2app._send('camera.checkPermission', {});
+            },
+            
+            requestPermission: function() {
+              return window.web2app._send('camera.requestPermission', {});
+            }
+          },
+          
+          // ═══════════════════════════════════════════
+          // LOCATION API
+          // ═══════════════════════════════════════════
+          
+          location: {
+            getCurrentPosition: function(options) {
+              return window.web2app._send('location.getCurrentPosition', options || {});
+            },
+            
+            watchPosition: function(callback, options) {
+              const callbackId = window.web2app._getCallbackId();
+              
+              // Store the callback
+              window.web2app._positionWatchers[callbackId] = callback;
+              
+              // Send command
+              return window.web2app._send('location.watchPosition', {
+                ...options,
+                callbackId: callbackId
+              }).then(() => callbackId);
+            },
+            
+            clearWatch: function(watchId) {
+              if (watchId && window.web2app._positionWatchers[watchId]) {
+                delete window.web2app._positionWatchers[watchId];
+              }
+              return window.web2app._send('location.clearWatch', {});
+            },
+            
+            distanceTo: function(coords) {
+              if (!coords || coords.latitude === undefined || coords.longitude === undefined) {
+                return Promise.reject(new Error('latitude and longitude are required'));
+              }
+              return window.web2app._send('location.distanceTo', coords);
+            },
+            
+            checkPermission: function() {
+              return window.web2app._send('location.checkPermission', {});
+            },
+            
+            requestPermission: function() {
+              return window.web2app._send('location.requestPermission', {});
+            },
+            
+            isLocationServiceEnabled: function() {
+              return window.web2app._send('location.isLocationServiceEnabled', {});
+            },
+            
+            openSettings: function() {
+              return window.web2app._send('location.openSettings', {});
+            }
+          },
+          
+          // Position update handler (called from native)
+          _handlePositionUpdate: function(callbackId, position) {
+            const callback = this._positionWatchers[callbackId];
+            if (callback) {
+              callback(position);
+            }
+          },
+          
+          _handlePositionError: function(callbackId, error) {
+            console.error('Position error:', error);
+          },
+          
+          // ═══════════════════════════════════════════
+          // SCANNER API
+          // ═══════════════════════════════════════════
+          
+          scanner: {
+            scan: function(options) {
+              return window.web2app._send('scanner.scan', options || {});
+            },
+            
+            scanBarcode: function(options) {
+              return window.web2app._send('scanner.scanBarcode', options || {});
+            },
+            
+            scanQR: function(options) {
+              return window.web2app._send('scanner.scanQR', options || {});
+            },
+            
+            checkPermission: function() {
+              return window.web2app._send('scanner.checkPermission', {});
+            },
+            
+            requestPermission: function() {
+              return window.web2app._send('scanner.requestPermission', {});
+            }
+          },
+          
+          // ═══════════════════════════════════════════
+          // STATUS BAR API (placeholder)
+          // ═══════════════════════════════════════════
+          
           statusBar: {
             setColor: function(color) {
               return window.web2app._send('statusBarSetColor', { color: color });
@@ -183,8 +283,6 @@ class JavaScriptBridge {
         };
         
         console.log('✅ Web2App JavaScript Bridge ready!');
-        
-        // Dispatch ready event
         window.dispatchEvent(new Event('web2appReady'));
       })();
     ''';
@@ -207,37 +305,46 @@ class JavaScriptBridge {
       final params = data['data'] as Map<String, dynamic>? ?? {};
       final callbackId = data['callbackId'] as String?;
 
-      // Handle command
       Map<String, dynamic>? result;
       String? error;
       
       try {
-        switch (command) {
-          case 'share':
-            result = await _handleShare(params);
-            break;
-          case 'vibrate':
-            result = await _handleVibrate(params);
-            break;
-          case 'getDeviceInfo':
-            result = await _handleGetDeviceInfo();
-            break;
-          case 'getAppInfo':
-            result = await _handleGetAppInfo();
-            break;
-          case 'openExternal':
-            result = await _handleOpenExternal(params);
-            break;
-          case 'toast':
-            result = await _handleToast(params);
-            break;
-          case 'statusBarSetColor':
-          case 'statusBarHide':
-          case 'statusBarShow':
-            result = {'success': true, 'message': 'Not yet implemented'};
-            break;
-          default:
-            error = 'Unknown command: $command';
+        // Route to appropriate handler
+        if (command.startsWith('camera.')) {
+          result = await _cameraBridge.handleCommand(command, params);
+        } else if (command.startsWith('location.')) {
+          result = await _locationBridge.handleCommand(command, params);
+        } else if (command.startsWith('scanner.')) {
+          result = await _scannerBridge.handleCommand(command, params);
+        } else {
+          // Handle basic commands
+          switch (command) {
+            case 'share':
+              result = await _handleShare(params);
+              break;
+            case 'vibrate':
+              result = await _handleVibrate(params);
+              break;
+            case 'getDeviceInfo':
+              result = await _handleGetDeviceInfo();
+              break;
+            case 'getAppInfo':
+              result = await _handleGetAppInfo();
+              break;
+            case 'openExternal':
+              result = await _handleOpenExternal(params);
+              break;
+            case 'toast':
+              result = await _handleToast(params);
+              break;
+            case 'statusBarSetColor':
+            case 'statusBarHide':
+            case 'statusBarShow':
+              result = {'success': true, 'message': 'Not yet implemented'};
+              break;
+            default:
+              error = 'Unknown command: $command';
+          }
         }
       } catch (e) {
         error = e.toString();
@@ -274,10 +381,9 @@ class JavaScriptBridge {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // Command Handlers
+  // Basic Command Handlers (from original bridge)
   // ═══════════════════════════════════════════════════════════
 
-  /// Handle share command
   Future<Map<String, dynamic>> _handleShare(Map<String, dynamic> params) async {
     try {
       final text = params['text'] as String? ?? '';
@@ -289,58 +395,41 @@ class JavaScriptBridge {
         shareText = '$text\n$url';
       }
 
-      final result = await Share.share(
-        shareText,
-        subject: subject,
-      );
+      final result = await Share.share(shareText, subject: subject);
 
       return {
         'success': true,
         'status': result.status.name,
       };
     } catch (e) {
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
+      return {'success': false, 'error': e.toString()};
     }
   }
 
-  /// Handle vibrate command
   Future<Map<String, dynamic>> _handleVibrate(Map<String, dynamic> params) async {
     try {
       final duration = params['duration'] as int? ?? 100;
       final patternData = params['pattern'] as List<dynamic>?;
 
-      // Check if device has vibrator
       final hasVibrator = await Vibration.hasVibrator() ?? false;
       
       if (!hasVibrator) {
-        return {
-          'success': false,
-          'error': 'Device does not support vibration',
-        };
+        return {'success': false, 'error': 'Device does not support vibration'};
       }
 
       if (patternData != null) {
-        // Pattern vibration
         final pattern = patternData.map((e) => e as int).toList();
         await Vibration.vibrate(pattern: pattern);
       } else {
-        // Simple vibration
         await Vibration.vibrate(duration: duration);
       }
 
       return {'success': true};
     } catch (e) {
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
+      return {'success': false, 'error': e.toString()};
     }
   }
 
-  /// Get device information
   Future<Map<String, dynamic>> _handleGetDeviceInfo() async {
     try {
       final deviceInfo = DeviceInfoPlugin();
@@ -359,28 +448,14 @@ class JavaScriptBridge {
           'isPhysicalDevice': androidInfo.isPhysicalDevice,
           'androidId': androidInfo.id,
         };
-      } else if (Platform.isIOS) {
-        final iosInfo = await deviceInfo.iosInfo;
-        info = {
-          'platform': 'ios',
-          'model': iosInfo.model,
-          'name': iosInfo.name,
-          'systemName': iosInfo.systemName,
-          'systemVersion': iosInfo.systemVersion,
-          'isPhysicalDevice': iosInfo.isPhysicalDevice,
-          'identifierForVendor': iosInfo.identifierForVendor,
-        };
       }
 
       return info;
     } catch (e) {
-      return {
-        'error': e.toString(),
-      };
+      return {'error': e.toString()};
     }
   }
 
-  /// Get app information
   Future<Map<String, dynamic>> _handleGetAppInfo() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -393,51 +468,35 @@ class JavaScriptBridge {
         'buildSignature': packageInfo.buildSignature,
       };
     } catch (e) {
-      return {
-        'error': e.toString(),
-      };
+      return {'error': e.toString()};
     }
   }
 
-  /// Handle open external URL
   Future<Map<String, dynamic>> _handleOpenExternal(Map<String, dynamic> params) async {
     try {
       final url = params['url'] as String?;
       
       if (url == null || url.isEmpty) {
-        return {
-          'success': false,
-          'error': 'URL is required',
-        };
+        return {'success': false, 'error': 'URL is required'};
       }
 
-      // This would need url_launcher implementation
-      // For now just return success
       return {
         'success': true,
         'message': 'Opening external URL: $url',
       };
     } catch (e) {
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
+      return {'success': false, 'error': e.toString()};
     }
   }
 
-  /// Handle toast message
   Future<Map<String, dynamic>> _handleToast(Map<String, dynamic> params) async {
     try {
       final message = params['message'] as String?;
       
       if (message == null || message.isEmpty) {
-        return {
-          'success': false,
-          'error': 'Message is required',
-        };
+        return {'success': false, 'error': 'Message is required'};
       }
 
-      // Show snackbar
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -449,10 +508,12 @@ class JavaScriptBridge {
 
       return {'success': true};
     } catch (e) {
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
+      return {'success': false, 'error': e.toString()};
     }
+  }
+  
+  /// Cleanup
+  void dispose() {
+    _locationBridge.dispose();
   }
 }
