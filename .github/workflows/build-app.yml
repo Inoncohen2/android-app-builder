@@ -27,7 +27,35 @@ jobs:
           cache: true
 
       - name: Install ImageMagick
-        run: sudo apt-get update && sudo apt-get install -y imagemagick
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick optipng
+      # ============================================
+      # 🔍 DEBUG - Show what we received
+      # ============================================
+      - name: Debug - Show Received Config
+        run: |
+          echo "=========================================="
+          echo "🔍 CONFIG RECEIVED FROM FRONTEND:"
+          echo "=========================================="
+          echo "App Name: ${{ github.event.client_payload.name }}"
+          echo "Package: ${{ github.event.client_payload.package_name }}"
+          echo "Website: ${{ github.event.client_payload.website_url }}"
+          echo "Build Format: ${{ github.event.client_payload.build_format }}"
+          echo ""
+          echo "📱 FEATURES:"
+          echo "Navigation: ${{ github.event.client_payload.config.navigation }}"
+          echo "Pull to Refresh: ${{ github.event.client_payload.config.pull_to_refresh }}"
+          echo "Splash Screen: ${{ github.event.client_payload.config.splash_screen }}"
+          echo "Enable Zoom: ${{ github.event.client_payload.config.enable_zoom }}"
+          echo "Keep Awake: ${{ github.event.client_payload.config.keep_awake }}"
+          echo "External Links: ${{ github.event.client_payload.config.open_external_links }}"
+          echo ""
+          echo "🎨 APPEARANCE:"
+          echo "Primary Color: ${{ github.event.client_payload.config.primary_color }}"
+          echo "Theme Mode: ${{ github.event.client_payload.config.theme_mode }}"
+          echo "Orientation: ${{ github.event.client_payload.config.orientation }}"
+          echo "=========================================="
 
       - name: Download Icon
         run: |
@@ -44,6 +72,9 @@ jobs:
           convert /tmp/icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
           convert /tmp/icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+         
+          # Optimize all icons
+          find android/app/src/main/res -name "ic_launcher.png" -exec optipng -o7 {} \;
 
       - name: Update Package Name
         run: |
@@ -93,60 +124,92 @@ jobs:
           echo "External Links: ${{ github.event.client_payload.config.open_external_links }}"
           echo "Splash: ${{ github.event.client_payload.config.splash_enabled }}"
 
-      - name: Generate Config
+      # ============================================
+      # ✅ FIXED CONFIG GENERATION
+      # ============================================
+      - name: Generate App Config
         run: |
-          # נקה URL
+          echo "🔧 Generating app_config.dart..."
+          
+          # Clean URL
           CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
           
-          # קבל ערכים עם fallback
+          # Get config values with proper defaults
           NAV="${{ github.event.client_payload.config.navigation }}"
           PTR="${{ github.event.client_payload.config.pull_to_refresh }}"
+          SPLASH="${{ github.event.client_payload.config.splash_screen }}"
           ZOOM="${{ github.event.client_payload.config.enable_zoom }}"
           AWAKE="${{ github.event.client_payload.config.keep_awake }}"
           LINKS="${{ github.event.client_payload.config.open_external_links }}"
-          SPLASH="${{ github.event.client_payload.config.splash_enabled }}"
-    
-          # ברירות מחדל
+          
+          PRIMARY="${{ github.event.client_payload.config.primary_color }}"
+          THEME="${{ github.event.client_payload.config.theme_mode }}"
+          ORIENT="${{ github.event.client_payload.config.orientation }}"
+          
+          # Set defaults for empty values
           [ -z "$NAV" ] && NAV="true"
           [ -z "$PTR" ] && PTR="true"
+          [ -z "$SPLASH" ] && SPLASH="false"
           [ -z "$ZOOM" ] && ZOOM="false"
           [ -z "$AWAKE" ] && AWAKE="false"
           [ -z "$LINKS" ] && LINKS="false"
-          [ -z "$SPLASH" ] && SPLASH="false"
-    
-          # בדיקה - האם הערכים boolean?
-          for var in "$NAV" "$PTR" "$ZOOM" "$AWAKE" "$LINKS" "$SPLASH"; do
-            if [[ "$var" != "true" && "$var" != "false" ]]; then
-              echo "❌ Error: Invalid boolean value: $var"
-              exit 1
+          
+          [ -z "$PRIMARY" ] && PRIMARY="#2196F3"
+          [ -z "$THEME" ] && THEME="auto"
+          [ -z "$ORIENT" ] && ORIENT="auto"
+          
+          # Validate boolean values
+          for var_name in "NAV" "PTR" "SPLASH" "ZOOM" "AWAKE" "LINKS"; do
+            var_value="${!var_name}"
+            if [[ "$var_value" != "true" && "$var_value" != "false" ]]; then
+              echo "⚠️  Warning: $var_name has invalid value '$var_value', using default"
+              case $var_name in
+                "NAV"|"PTR") eval "$var_name=true" ;;
+                *) eval "$var_name=false" ;;
+              esac
             fi
           done
-    
-          cat > lib/app_config.dart << EOF
+          
+          # Generate config file
+          cat > lib/app_config.dart << 'EOF'
           class AppConfig {
             static const String appName = '${{ github.event.client_payload.name }}';
-            static const String websiteUrl = '$CLEAN_URL';
+            static const String appName = '${{ github.event.client_payload.name }}';
+            static const String websiteUrl = '${CLEAN_URL}';
             static const String packageName = '${{ github.event.client_payload.package_name }}';
-            static const String primaryColor = '${{ github.event.client_payload.config.primary_color }}';
-            static const String themeMode = '${{ github.event.client_payload.config.theme_mode }}';
-            static const String orientation = '${{ github.event.client_payload.config.orientation }}';
-      
-            static const bool showNavigation = $NAV;
-            static const bool pullToRefresh = $PTR;
-            static const bool enableZoom = $ZOOM;
-            static const bool keepAwake = $AWAKE;
-            static const bool openExternalLinks = $LINKS;
-            static const bool splashEnabled = $SPLASH;
-            static const String splashColor = '${{ github.event.client_payload.config.splash_color }}';
-          }
-          EOF
-    
+          
+             // Appearance
+            static const String primaryColor = '${PRIMARY}';
+            static const String themeMode = '${THEME}'; // 'light', 'dark', 'auto'
+            static const String orientation = '${ORIENT}'; // 'portrait', 'landscape', 'auto'
+  
+            // Features
+            static const bool showNavigation = ${NAV};
+            static const bool pullToRefresh = ${PTR};
+            static const bool splashScreen = ${SPLASH};
+            static const bool enableZoom = ${ZOOM};
+            static const bool keepAwake = ${AWAKE};
+            static const bool openExternalLinks = ${LINKS};
+                    }
+                    EOF 
+          
+          # Replace variables
+          sed -i "s|\${CLEAN_URL}|${CLEAN_URL}|g" lib/app_config.dart
+          sed -i "s|\${PRIMARY}|${PRIMARY}|g" lib/app_config.dart
+          sed -i "s|\${THEME}|${THEME}|g" lib/app_config.dart
+          sed -i "s|\${ORIENT}|${ORIENT}|g" lib/app_config.dart
+          sed -i "s|\${NAV}|${NAV}|g" lib/app_config.dart
+          sed -i "s|\${PTR}|${PTR}|g" lib/app_config.dart
+          sed -i "s|\${SPLASH}|${SPLASH}|g" lib/app_config.dart
+          sed -i "s|\${ZOOM}|${ZOOM}|g" lib/app_config.dart
+          sed -i "s|\${AWAKE}|${AWAKE}|g" lib/app_config.dart
+          sed -i "s|\${LINKS}|${LINKS}|g" lib/app_config.dart
+          
           echo "=========================================="
-          echo "✅ Generated config:"
+          echo "✅ Generated app_config.dart:"
           echo "=========================================="
           cat lib/app_config.dart
           echo "=========================================="
-
 
       - name: Install Dependencies
         run: flutter pub get
