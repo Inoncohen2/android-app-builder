@@ -12,6 +12,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        
+      - name: Report Run ID to Supabase
+        run: |
+          APP_ID="${{ github.event.client_payload.app_id }}"
+          RUN_ID="${{ github.run_id }}"
+          
+          curl -X PATCH \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${APP_ID}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"github_run_id\": \"${RUN_ID}\"}"
+            
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -407,13 +420,17 @@ jobs:
           APP_ID="${{ github.event.client_payload.app_id }}"
           FORMAT="${{ github.event.client_payload.build_format }}"
           
+          # יצירת שם קובץ נקי מרווחים עבור ההורדה (מחליף רווחים בקו תחתון)
+          APP_NAME_CLEAN=$(echo "${{ github.event.client_payload.name }}" | tr ' ' '_')
+          
           curl -X POST \
             "${{ secrets.SUPABASE_URL }}/storage/v1/object/builds/${APP_ID}.${FORMAT}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/octet-stream" \
             --data-binary @"$BUILD_FILE"
-          
-          DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/builds/${APP_ID}.${FORMAT}"
+            
+          # הוספת פרמטר ?download כדי להכריח את הדפדפן לשמור בשם היפה
+          DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/builds/${APP_ID}.${FORMAT}?download=${APP_NAME_CLEAN}.${FORMAT}"
           
           curl -X PATCH \
             "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${APP_ID}" \
@@ -425,7 +442,9 @@ jobs:
 
       - name: Send Beautiful Email
         run: |
-          DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/builds/${{ github.event.client_payload.app_id }}.${{ github.event.client_payload.build_format }}"
+          # גם במייל נשתמש בשם הנקי כדי שהכפתור יוריד את השם הנכון
+          APP_NAME_CLEAN=$(echo "${{ github.event.client_payload.name }}" | tr ' ' '_')
+          DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/builds/${{ github.event.client_payload.app_id }}.${{ github.event.client_payload.build_format }}?download=${APP_NAME_CLEAN}.${{ github.event.client_payload.build_format }}"
           PRIMARY_COLOR="${{ github.event.client_payload.config.primary_color }}"
           [ -z "$PRIMARY_COLOR" ] && PRIMARY_COLOR="#2196F3"
           ICON_URL="${{ github.event.client_payload.icon_url }}"
