@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 JavaScript Bridge Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 28px;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 24px;
+        }
+        
+        .status.success { background: #4CAF50; color: white; }
+        .status.error { background: #f44336; color: white; }
+        .status.pending { background: #FF9800; color: white; }
+        
+        .section {
+            margin-bottom: 32px;
+        }
+        
+        .section h2 {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        button {
+            width: 100%;
+            padding: 14px;
+            margin: 6px 0;
+            border: none;
+            border-radius: 8px;
+            background: #667eea;
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+        }
+        
+        button:active {
+            transform: scale(0.98);
+        }
+        
+        button.secondary {
+            background: #f093fb;
+        }
+        
+        button.secondary:hover {
+            background: #e77fec;
+        }
+        
+        .output {
+            margin-top: 16px;
+            padding: 16px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            direction: ltr;
+            text-align: left;
+        }
+        
+        .log-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        
+        .log-time {
+            color: #999;
+            font-size: 11px;
+        }
+        
+        .log-success { color: #4CAF50; }
+        .log-error { color: #f44336; }
+        .log-info { color: #2196F3; }
+        
+        .clear-btn {
+            background: #757575;
+            font-size: 13px;
+            padding: 8px 16px;
+            width: auto;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 JavaScript Bridge Test</h1>
+        <div id="status" class="status pending">⏳ מאתחל...</div>
+        
+        <!-- Basic Functions -->
+        <div class="section">
+            <h2>📱 פונקציות בסיסיות</h2>
+            <button onclick="testShare()">
+                <span>📤</span> Test Share
+            </button>
+            <button onclick="testVibrate()">
+                <span>📳</span> Test Vibrate
+            </button>
+            <button onclick="testVibratePattern()">
+                <span>🎵</span> Test Vibrate Pattern
+            </button>
+        </div>
+        
+        <!-- Device Info -->
+        <div class="section">
+            <h2>ℹ️ מידע מכשיר</h2>
+            <button onclick="testDeviceInfo()">
+                <span>📱</span> Get Device Info
+            </button>
+            <button onclick="testAppInfo()">
+                <span>📦</span> Get App Info
+            </button>
+        </div>
+        
+        <!-- Advanced -->
+        <div class="section">
+            <h2>🚀 פונקציות מתקדמות</h2>
+            <button onclick="testToast()" class="secondary">
+                <span>💬</span> Show Toast Message
+            </button>
+            <button onclick="testOpenExternal()" class="secondary">
+                <span>🌐</span> Open External URL
+            </button>
+        </div>
+        
+        <!-- Stress Test -->
+        <div class="section">
+            <h2>🔥 בדיקות מקיפות</h2>
+            <button onclick="testAll()" class="secondary">
+                <span>🚀</span> Run All Tests
+            </button>
+            <button onclick="stressTest()" class="secondary">
+                <span>💪</span> Stress Test (10x)
+            </button>
+        </div>
+        
+        <!-- Output Console -->
+        <div class="section">
+            <h2>📋 Console Output</h2>
+            <div class="output" id="output"></div>
+            <button onclick="clearOutput()" class="clear-btn">
+                🗑️ Clear
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const output = document.getElementById('output');
+        const status = document.getElementById('status');
+        let logCount = 0;
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.innerHTML = `<span class="log-time">[${timestamp}]</span> ${message}`;
+            output.appendChild(entry);
+            output.scrollTop = output.scrollHeight;
+            logCount++;
+            
+            if (type === 'success') {
+                updateStatus('✅ Success', 'success');
+            } else if (type === 'error') {
+                updateStatus('❌ Error', 'error');
+            } else {
+                updateStatus('⏳ Testing...', 'pending');
+            }
+        }
+        
+        function updateStatus(text, type) {
+            status.textContent = text;
+            status.className = `status ${type}`;
+        }
+        
+        function clearOutput() {
+            output.innerHTML = '';
+            logCount = 0;
+            updateStatus('🧹 Cleared', 'pending');
+        }
+        
+        // Check if median bridge is available
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                if (typeof window.median !== 'undefined') {
+                    log('✅ Median bridge is available!', 'success');
+                    log(`API methods: ${Object.keys(window.median).filter(k => typeof window.median[k] === 'function').join(', ')}`, 'info');
+                } else {
+                    log('❌ Median bridge not found!', 'error');
+                    log('⚠️ Make sure you\'re running in the Web2App app', 'error');
+                }
+            }, 1000);
+        });
+        
+        // Also listen for medianReady event
+        window.addEventListener('medianReady', () => {
+            log('🎉 Median bridge ready event fired!', 'success');
+        });
+        
+        // ═══════════════════════════════════════════
+        // Test Functions
+        // ═══════════════════════════════════════════
+        
+        async function testShare() {
+            log('🧪 Testing share...', 'info');
+            try {
+                const result = await window.median.share({
+                    text: 'Check out Web2App Builder! 🚀',
+                    subject: 'Amazing App Builder',
+                    url: 'https://web2app-builder.vercel.app'
+                });
+                log(`✅ Share result: ${JSON.stringify(result)}`, 'success');
+            } catch (error) {
+                log(`❌ Share error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testVibrate() {
+            log('🧪 Testing vibrate (200ms)...', 'info');
+            try {
+                const result = await window.median.vibrate({ duration: 200 });
+                log(`✅ Vibrate result: ${JSON.stringify(result)}`, 'success');
+            } catch (error) {
+                log(`❌ Vibrate error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testVibratePattern() {
+            log('🧪 Testing vibrate pattern...', 'info');
+            try {
+                // Pattern: wait 0ms, vibrate 100ms, wait 50ms, vibrate 200ms
+                const result = await window.median.vibrate({
+                    pattern: [0, 100, 50, 200]
+                });
+                log(`✅ Pattern vibrate result: ${JSON.stringify(result)}`, 'success');
+            } catch (error) {
+                log(`❌ Pattern vibrate error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testDeviceInfo() {
+            log('🧪 Getting device info...', 'info');
+            try {
+                const info = await window.median.getDeviceInfo();
+                log(`✅ Device info:`, 'success');
+                log(JSON.stringify(info, null, 2), 'info');
+            } catch (error) {
+                log(`❌ Device info error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testAppInfo() {
+            log('🧪 Getting app info...', 'info');
+            try {
+                const info = await window.median.getAppInfo();
+                log(`✅ App info:`, 'success');
+                log(JSON.stringify(info, null, 2), 'info');
+            } catch (error) {
+                log(`❌ App info error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testToast() {
+            log('🧪 Showing toast message...', 'info');
+            try {
+                const result = await window.median.toast('Hello from JavaScript! 👋');
+                log(`✅ Toast result: ${JSON.stringify(result)}`, 'success');
+            } catch (error) {
+                log(`❌ Toast error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testOpenExternal() {
+            log('🧪 Opening external URL...', 'info');
+            try {
+                const result = await window.median.openExternal('https://web2app-builder.vercel.app');
+                log(`✅ Open external result: ${JSON.stringify(result)}`, 'success');
+            } catch (error) {
+                log(`❌ Open external error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testAll() {
+            log('🚀 Running all tests...', 'info');
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            
+            await testDeviceInfo();
+            await sleep(500);
+            
+            await testAppInfo();
+            await sleep(500);
+            
+            await testVibrate();
+            await sleep(500);
+            
+            await testToast();
+            await sleep(500);
+            
+            await testShare();
+            
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            log('✅ All tests complete!', 'success');
+        }
+        
+        async function stressTest() {
+            log('💪 Running stress test (10 iterations)...', 'info');
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            
+            for (let i = 1; i <= 10; i++) {
+                log(`🔄 Iteration ${i}/10...`, 'info');
+                
+                try {
+                    await window.median.vibrate({ duration: 50 });
+                    await sleep(100);
+                } catch (e) {
+                    log(`❌ Iteration ${i} failed: ${e.message}`, 'error');
+                }
+            }
+            
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            log('✅ Stress test complete!', 'success');
+        }
+        
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+        
+        // ═══════════════════════════════════════════
+        // Error Handler
+        // ═══════════════════════════════════════════
+        
+        window.addEventListener('error', (event) => {
+            log(`⚠️ JavaScript error: ${event.message}`, 'error');
+        });
+        
+        window.addEventListener('unhandledrejection', (event) => {
+            log(`⚠️ Unhandled promise rejection: ${event.reason}`, 'error');
+        });
+    </script>
+</body>
+</html>
