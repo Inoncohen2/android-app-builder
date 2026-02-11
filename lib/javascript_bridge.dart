@@ -19,7 +19,7 @@ class JavaScriptBridge {
     
     // Add JavaScript channel for communication
     controller.addJavaScriptChannel(
-      'median',
+      'web2app',
       onMessageReceived: (JavaScriptMessage message) {
         _handleMessage(message.message);
       },
@@ -36,15 +36,15 @@ class JavaScriptBridge {
     final script = '''
       (function() {
         // Only initialize once
-        if (typeof window.median !== 'undefined') {
-          console.log('✅ Median bridge already initialized');
+        if (typeof window.web2app !== 'undefined') {
+          console.log('✅ Web2App bridge already initialized');
           return;
         }
         
-        console.log('🌉 Initializing Median JavaScript Bridge...');
+        console.log('🌉 Initializing Web2App JavaScript Bridge...');
         
-        // Create median object
-        window.median = {
+        // Create web2app object
+        window.web2app = {
           _callbacks: {},
           _callbackId: 0,
           
@@ -77,7 +77,7 @@ class JavaScriptBridge {
               });
               
               try {
-                median.postMessage(message);
+                web2app.postMessage(message);
               } catch (e) {
                 reject(new Error('Failed to send message: ' + e.message));
                 delete this._callbacks[callbackId];
@@ -171,21 +171,21 @@ class JavaScriptBridge {
           // Status Bar API
           statusBar: {
             setColor: function(color) {
-              return window.median._send('statusBarSetColor', { color: color });
+              return window.web2app._send('statusBarSetColor', { color: color });
             },
             hide: function() {
-              return window.median._send('statusBarHide', {});
+              return window.web2app._send('statusBarHide', {});
             },
             show: function() {
-              return window.median._send('statusBarShow', {});
+              return window.web2app._send('statusBarShow', {});
             }
           }
         };
         
-        console.log('✅ Median JavaScript Bridge ready!');
+        console.log('✅ Web2App JavaScript Bridge ready!');
         
         // Dispatch ready event
-        window.dispatchEvent(new Event('medianReady'));
+        window.dispatchEvent(new Event('web2appReady'));
       })();
     ''';
 
@@ -261,8 +261,8 @@ class JavaScriptBridge {
       
       final script = '''
         (function() {
-          if (window.median && window.median._handleResponse) {
-            window.median._handleResponse('$callbackId', $resultJson, $errorJson);
+          if (window.web2app && window.web2app._handleResponse) {
+            window.web2app._handleResponse('$callbackId', $resultJson, $errorJson);
           }
         })();
       ''';
