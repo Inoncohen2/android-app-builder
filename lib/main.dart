@@ -205,19 +205,15 @@ class _WebViewScreenState extends State<WebViewScreen> {
               setState(() => _isLoading = false);
             }
           },
-          
           onWebResourceError: (error) {
             print('❌ Error: ${error.description}');
+  
             if (error.errorType == WebResourceErrorType.hostLookup ||
                 error.errorType == WebResourceErrorType.connect ||
                 error.errorType == WebResourceErrorType.timeout) {
-              if (mounted) {
-                setState(() {
-                  _isLoading = false;
-                  _hasError = true;
-                  _errorMessage = 'Failed to load website. Check your connection.';
-                });
-              }
+    
+              // Load beautiful offline page
+              _controller.loadFlutterAsset('assets/offline.html');
             }
           },
           
