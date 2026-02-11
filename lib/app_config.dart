@@ -1,13 +1,21 @@
 class AppConfig {
-  static const String appName = 'My App';
-  static const String websiteUrl = 'https://example.com';
-  static const String packageName = 'com.example.app';
-  static const String primaryColor = '#2196F3';
-  static const String themeMode = 'system';
-  static const bool showNavigation = true;
-  static const bool pullToRefresh = true;
-  static const String orientation = 'auto';
-  static const bool enableZoom = false;
-  static const bool keepAwake = false;
-  static const bool openExternalLinks = false;
+  static const String appName = '...';
+  static const String websiteUrl = '...';
+  static const String packageName = '...';
+  
+  // Appearance
+  static const String primaryColor = '...';
+  static const String themeMode = '...';
+  static const String orientation = '...';
+  
+  // Behavior
+  static const bool showNavigation = ...;
+  static const bool pullToRefresh = ...;
+  static const bool enableZoom = ...;
+  static const bool keepAwake = ...;
+  static const bool openExternalLinks = ...;
+  
+  // Splash Screen (NEW!)
+  static const bool splashEnabled = ...;
+  static const String splashColor = '...';
 }
