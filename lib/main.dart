@@ -4,6 +4,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_config.dart';
+import 'settings_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
