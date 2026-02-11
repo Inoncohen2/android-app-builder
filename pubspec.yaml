@@ -1,5 +1,5 @@
-name: android_app_builder
-description: Custom WebView App Builder
+name: web2app_builder
+description: Turn any website into a native Android app
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,9 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  webview_flutter: ^4.7.0
+  webview_flutter: ^4.4.2
   wakelock_plus: ^1.1.4
-  url_launcher: ^6.2.3
+  url_launcher: ^6.2.2
 
 dev_dependencies:
   flutter_test:
@@ -20,3 +20,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/
