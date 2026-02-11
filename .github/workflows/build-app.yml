@@ -83,39 +83,44 @@ jobs:
           # צור splash screens
           flutter pub run flutter_native_splash:create
           
-      - name: Debug - Show Received Config
+      - name: Debug - Show Config
         run: |
-          echo "=========================================="
-          echo "🔍 Debugging Config:"
-          echo "=========================================="
+          echo "🔍 Config Received:"
           echo "Navigation: ${{ github.event.client_payload.config.navigation }}"
           echo "Pull to Refresh: ${{ github.event.client_payload.config.pull_to_refresh }}"
-          echo "Enable Zoom: ${{ github.event.client_payload.config.enable_zoom }}"
+          echo "Zoom: ${{ github.event.client_payload.config.enable_zoom }}"
           echo "Keep Awake: ${{ github.event.client_payload.config.keep_awake }}"
           echo "External Links: ${{ github.event.client_payload.config.open_external_links }}"
-          echo "Primary Color: ${{ github.event.client_payload.config.primary_color }}"
-          echo "Theme Mode: ${{ github.event.client_payload.config.theme_mode }}"
-          echo "Orientation: ${{ github.event.client_payload.config.orientation }}"
-          echo "=========================================="
+          echo "Splash: ${{ github.event.client_payload.config.splash_enabled }}"
 
       - name: Generate Config
         run: |
-          # נקה URL מקווים תחתונים
+          # נקה URL
           CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
-    
-          # ולידציה - ערכי Boolean
+          
+          # קבל ערכים עם fallback
           NAV="${{ github.event.client_payload.config.navigation }}"
           PTR="${{ github.event.client_payload.config.pull_to_refresh }}"
           ZOOM="${{ github.event.client_payload.config.enable_zoom }}"
           AWAKE="${{ github.event.client_payload.config.keep_awake }}"
           LINKS="${{ github.event.client_payload.config.open_external_links }}"
+          SPLASH="${{ github.event.client_payload.config.splash_enabled }}"
     
-          # ברירת מחדל אם ריק
+          # ברירות מחדל
           [ -z "$NAV" ] && NAV="true"
           [ -z "$PTR" ] && PTR="true"
           [ -z "$ZOOM" ] && ZOOM="false"
           [ -z "$AWAKE" ] && AWAKE="false"
           [ -z "$LINKS" ] && LINKS="false"
+          [ -z "$SPLASH" ] && SPLASH="false"
+    
+          # בדיקה - האם הערכים boolean?
+          for var in "$NAV" "$PTR" "$ZOOM" "$AWAKE" "$LINKS" "$SPLASH"; do
+            if [[ "$var" != "true" && "$var" != "false" ]]; then
+              echo "❌ Error: Invalid boolean value: $var"
+              exit 1
+            fi
+          done
     
           cat > lib/app_config.dart << EOF
           class AppConfig {
@@ -124,12 +129,15 @@ jobs:
             static const String packageName = '${{ github.event.client_payload.package_name }}';
             static const String primaryColor = '${{ github.event.client_payload.config.primary_color }}';
             static const String themeMode = '${{ github.event.client_payload.config.theme_mode }}';
+            static const String orientation = '${{ github.event.client_payload.config.orientation }}';
+      
             static const bool showNavigation = $NAV;
             static const bool pullToRefresh = $PTR;
-            static const String orientation = '${{ github.event.client_payload.config.orientation }}';
-           static const bool enableZoom = $ZOOM;
+            static const bool enableZoom = $ZOOM;
             static const bool keepAwake = $AWAKE;
             static const bool openExternalLinks = $LINKS;
+            static const bool splashEnabled = $SPLASH;
+            static const String splashColor = '${{ github.event.client_payload.config.splash_color }}';
           }
           EOF
     
