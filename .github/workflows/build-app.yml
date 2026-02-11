@@ -43,6 +43,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y imagemagick optipng pngquant
+
+      - name: Report Progress - 10%
+        run: |
+          curl -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"progress": 10, "build_message": "Setting up build environment..."}'
           
       # ============================================
       # 🔍 DEBUG - Show what we received
@@ -134,7 +142,15 @@ jobs:
           EOF
           
           echo "✅ Adaptive icons created successfully!"
-
+          
+      - name: Report Progress - 30%
+        run: |
+          curl -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"progress": 30, "build_message": "Processing app icons and assets..."}'
+            
       - name: Optimize All Images
         run: |
           echo "🗜️ Optimizing PNG images..."
@@ -270,7 +286,15 @@ jobs:
           echo "=========================================="
           cat lib/app_config.dart
           echo "=========================================="
-
+          
+      - name: Report Progress - 50%
+        run: |
+          curl -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"progress": 50, "build_message": "Applying your custom configurations..."}'
+            
       # ============================================
       # ✅ CREATE SETTINGS SCREEN
       # ============================================
@@ -372,10 +396,26 @@ jobs:
           DART_EOF
           
           echo "✅ settings_screen.dart created!"
-
+          
+      - name: Report Progress - 70%
+        run: |
+          curl -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"progress": 70, "build_message": "Downloading required packages..."}'
+            
       - name: Install Dependencies
         run: flutter pub get
-
+        
+      - name: Report Progress - 80%
+        run: |
+          curl -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"progress": 80, "build_message": "Compiling the app (this is the longest part!)..."}'
+            
       - name: Build APK/AAB
         run: |
           if [ "${{ github.event.client_payload.build_format }}" == "aab" ]; then
@@ -414,7 +454,15 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
             -d "{\"source_url\": \"${DOWNLOAD_URL}\"}"
-
+            
+      - name: Report Progress - 90%
+        run: |
+          curl -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"progress": 90, "build_message": "Uploading your app to the cloud..."}'
+            
       - name: Upload to Supabase
         run: |
           APP_ID="${{ github.event.client_payload.app_id }}"
