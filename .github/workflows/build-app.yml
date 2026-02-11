@@ -1,4 +1,4 @@
-name: Build Android APK/AAB
+name: Build Android APK
 
 on:
   repository_dispatch:
@@ -26,15 +26,15 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Install Tools
+      - name: Install ImageMagick & optipng
         run: |
           sudo apt-get update
           sudo apt-get install -y imagemagick optipng
 
       # ============================================
-      # 🔍 DEBUG - Show received config
+      # 🔍 DEBUG - Show what we received
       # ============================================
-      - name: Debug - Show Config
+      - name: Debug - Show Received Config
         run: |
           echo "=========================================="
           echo "🔍 CONFIG RECEIVED FROM FRONTEND:"
@@ -42,7 +42,6 @@ jobs:
           echo "App Name: ${{ github.event.client_payload.name }}"
           echo "Package: ${{ github.event.client_payload.package_name }}"
           echo "Website: ${{ github.event.client_payload.website_url }}"
-          echo "Privacy Policy: ${{ github.event.client_payload.privacy_policy_url }}"
           echo "Build Format: ${{ github.event.client_payload.build_format }}"
           echo ""
           echo "📱 FEATURES:"
@@ -59,42 +58,25 @@ jobs:
           echo "Orientation: ${{ github.event.client_payload.config.orientation }}"
           echo "=========================================="
 
-      # ============================================
-      # 🎨 ICONS - With Adaptive Icons support
-      # ============================================
-      - name: Generate Icons
+      - name: Download Icon
         run: |
-          # Create directories
           mkdir -p android/app/src/main/res/mipmap-xxxhdpi
           mkdir -p android/app/src/main/res/mipmap-xxhdpi
           mkdir -p android/app/src/main/res/mipmap-xhdpi
           mkdir -p android/app/src/main/res/mipmap-hdpi
           mkdir -p android/app/src/main/res/mipmap-mdpi
           
-          # Download icon
           curl -L -o /tmp/icon.png "${{ github.event.client_payload.icon_url }}"
           
-          echo "📱 Generating regular launcher icons..."
+          # Generate regular icons
           convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
           convert /tmp/icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
           
-          echo "🎯 Generating adaptive icon foregrounds..."
-          # Create foreground with transparent border for adaptive icons
-          convert /tmp/icon.png -bordercolor transparent -border 30 /tmp/icon_fg.png
-          
-          convert /tmp/icon_fg.png -resize 432x432 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
-          convert /tmp/icon_fg.png -resize 324x324 android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png
-          convert /tmp/icon_fg.png -resize 216x216 android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png
-          convert /tmp/icon_fg.png -resize 162x162 android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png
-          convert /tmp/icon_fg.png -resize 108x108 android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png
-          
-          echo "⚡ Optimizing all icons..."
-          find android/app/src/main/res -name "ic_launcher*.png" -exec optipng -o7 {} \;
-          
-          echo "✅ Icons generated and optimized!"
+          # Optimize all icons
+          find android/app/src/main/res -name "ic_launcher.png" -exec optipng -o7 {} \;
 
       - name: Update Package Name
         run: |
@@ -119,7 +101,7 @@ jobs:
           # Clean URL
           CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
           
-          # Get config values
+          # Get config values with proper defaults
           NAV="${{ github.event.client_payload.config.navigation }}"
           PTR="${{ github.event.client_payload.config.pull_to_refresh }}"
           SPLASH="${{ github.event.client_payload.config.splash_screen }}"
@@ -130,9 +112,8 @@ jobs:
           PRIMARY="${{ github.event.client_payload.config.primary_color }}"
           THEME="${{ github.event.client_payload.config.theme_mode }}"
           ORIENT="${{ github.event.client_payload.config.orientation }}"
-          PRIVACY="${{ github.event.client_payload.privacy_policy_url }}"
           
-          # Defaults
+          # Set defaults for empty values
           [ -z "$NAV" ] && NAV="true"
           [ -z "$PTR" ] && PTR="true"
           [ -z "$SPLASH" ] && SPLASH="false"
@@ -143,40 +124,53 @@ jobs:
           [ -z "$PRIMARY" ] && PRIMARY="#2196F3"
           [ -z "$THEME" ] && THEME="auto"
           [ -z "$ORIENT" ] && ORIENT="auto"
-          [ -z "$PRIVACY" ] && PRIVACY=""
           
-          # Validate booleans
-          for var in NAV PTR SPLASH ZOOM AWAKE LINKS; do
-            val="${!var}"
-            if [[ "$val" != "true" && "$val" != "false" ]]; then
-              echo "⚠️  Warning: $var=$val is not boolean, using default"
-              case $var in NAV|PTR) eval "$var=true";; *) eval "$var=false";; esac
+          # Validate boolean values
+          for var_name in "NAV" "PTR" "SPLASH" "ZOOM" "AWAKE" "LINKS"; do
+            var_value="${!var_name}"
+            if [[ "$var_value" != "true" && "$var_value" != "false" ]]; then
+              echo "⚠️  Warning: $var_name has invalid value '$var_value', using default"
+              case $var_name in
+                "NAV"|"PTR") eval "$var_name=true" ;;
+                *) eval "$var_name=false" ;;
+              esac
             fi
           done
           
-          # Generate config
-          cat > lib/app_config.dart << EOF
-          class AppConfig {
-            // Identity
-            static const String appName = '${{ github.event.client_payload.name }}';
-            static const String websiteUrl = '${CLEAN_URL}';
-            static const String packageName = '${{ github.event.client_payload.package_name }}';
-            static const String privacyPolicyUrl = '${PRIVACY}';
-            
-            // Appearance
-            static const String primaryColor = '${PRIMARY}';
-            static const String themeMode = '${THEME}';
-            static const String orientation = '${ORIENT}';
-            
-            // Features
-            static const bool showNavigation = ${NAV};
-            static const bool pullToRefresh = ${PTR};
-            static const bool splashScreen = ${SPLASH};
-            static const bool enableZoom = ${ZOOM};
-            static const bool keepAwake = ${AWAKE};
-            static const bool openExternalLinks = ${LINKS};
-          }
-          EOF
+          # Generate config file
+          cat > lib/app_config.dart << 'EOF'
+class AppConfig {
+  // App Identity
+  static const String appName = '${{ github.event.client_payload.name }}';
+  static const String websiteUrl = '${CLEAN_URL}';
+  static const String packageName = '${{ github.event.client_payload.package_name }}';
+  
+  // Appearance
+  static const String primaryColor = '${PRIMARY}';
+  static const String themeMode = '${THEME}'; // 'light', 'dark', 'auto'
+  static const String orientation = '${ORIENT}'; // 'portrait', 'landscape', 'auto'
+  
+  // Features
+  static const bool showNavigation = ${NAV};
+  static const bool pullToRefresh = ${PTR};
+  static const bool splashScreen = ${SPLASH};
+  static const bool enableZoom = ${ZOOM};
+  static const bool keepAwake = ${AWAKE};
+  static const bool openExternalLinks = ${LINKS};
+}
+EOF
+          
+          # Replace variables
+          sed -i "s|\${CLEAN_URL}|${CLEAN_URL}|g" lib/app_config.dart
+          sed -i "s|\${PRIMARY}|${PRIMARY}|g" lib/app_config.dart
+          sed -i "s|\${THEME}|${THEME}|g" lib/app_config.dart
+          sed -i "s|\${ORIENT}|${ORIENT}|g" lib/app_config.dart
+          sed -i "s|\${NAV}|${NAV}|g" lib/app_config.dart
+          sed -i "s|\${PTR}|${PTR}|g" lib/app_config.dart
+          sed -i "s|\${SPLASH}|${SPLASH}|g" lib/app_config.dart
+          sed -i "s|\${ZOOM}|${ZOOM}|g" lib/app_config.dart
+          sed -i "s|\${AWAKE}|${AWAKE}|g" lib/app_config.dart
+          sed -i "s|\${LINKS}|${LINKS}|g" lib/app_config.dart
           
           echo "=========================================="
           echo "✅ Generated app_config.dart:"
@@ -190,7 +184,7 @@ jobs:
       - name: Build APK/AAB
         run: |
           if [ "${{ github.event.client_payload.build_format }}" == "aab" ]; then
-            echo "🔨 Building AAB for Google Play..."
+            echo "🔨 Building AAB..."
             flutter build appbundle --release
             BUILD_FILE="build/app/outputs/bundle/release/app-release.aab"
           else
@@ -240,11 +234,11 @@ jobs:
             FEATURES="${FEATURES}<span style='display:inline-block;background:linear-gradient(135deg,#4facfe 0%,#00f2fe 100%);color:white;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;margin:4px;'>🔍 Zoom</span>"
           fi
           
-          EMAIL_HTML="<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'></head><body style='margin:0;padding:0;font-family:Arial,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);'><div style='max-width:650px;margin:40px auto;padding:0 20px;'><div style='text-align:center;margin-bottom:24px;'><img src='https://res.cloudinary.com/ddsogd7hv/image/upload/v1770576910/Icon2_dvenip.png' style='width:80px;height:80px;border-radius:20px;box-shadow:0 8px 24px rgba(0,0,0,0.2);'/><div style='margin-top:12px;'><a href='https://web2app-builder.vercel.app/' style='color:white;text-decoration:none;font-size:24px;font-weight:700;'>Web2App Builder</a></div></div><div style='background:white;border-radius:24px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3);'><div style='background:${PRIMARY_COLOR};padding:48px 32px;text-align:center;'><div style='font-size:64px;margin-bottom:16px;'>✅</div><h1 style='margin:0;color:white;font-size:28px;'>האפליקציה שלך מוכנה! 🎉</h1><p style='margin:16px 0 0;color:rgba(255,255,255,0.95);'>הבנייה הושלמה בהצלחה</p></div><div style='padding:40px 32px;'><div style='text-align:center;margin-bottom:32px;'><img src='${ICON_URL}' style='width:100px;height:100px;border-radius:24px;box-shadow:0 8px 24px rgba(0,0,0,0.15);margin-bottom:16px;'/><h2 style='margin:0;color:#1a1a1a;font-size:24px;'>${{ github.event.client_payload.name }}</h2><p style='margin:8px 0 0;color:#666;font-size:14px;'>${{ github.event.client_payload.package_name }}</p></div><div style='text-align:center;margin:40px 0;'><a href='${DOWNLOAD_URL}' style='display:inline-block;background:${PRIMARY_COLOR};color:white;text-decoration:none;padding:18px 56px;border-radius:50px;font-size:18px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,0.2);'>⬇️ הורד ${{ github.event.client_payload.build_format == 'aab' && 'AAB' || 'APK' }}</a></div><div style='background:#ffeef8;padding:24px;border-radius:16px;margin:24px 0;'><h3 style='margin:0 0 16px;color:#1a1a1a;font-size:18px;'>✨ פיצ'רים</h3><div style='text-align:center;'>${FEATURES}</div></div></div></div></div></body></html>"
+          EMAIL_HTML="<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'></head><body style='margin:0;padding:0;font-family:Arial,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);'><div style='max-width:650px;margin:40px auto;padding:0 20px;'><div style='text-align:center;margin-bottom:24px;'><img src='https://res.cloudinary.com/ddsogd7hv/image/upload/v1770576910/Icon2_dvenip.png' style='width:80px;height:80px;border-radius:20px;box-shadow:0 8px 24px rgba(0,0,0,0.2);'/><div style='margin-top:12px;'><a href='https://web2app-builder.vercel.app/' style='color:white;text-decoration:none;font-size:24px;font-weight:700;'>Web2App Builder</a></div></div><div style='background:white;border-radius:24px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3);'><div style='background:${PRIMARY_COLOR};padding:48px 32px;text-align:center;'><div style='font-size:64px;margin-bottom:16px;'>✅</div><h1 style='margin:0;color:white;font-size:28px;'>האפליקציה שלך מוכנה! 🎉</h1><p style='margin:16px 0 0;color:rgba(255,255,255,0.95);'>הבנייה הושלמה בהצלחה</p></div><div style='padding:40px 32px;'><div style='text-align:center;margin-bottom:32px;'><img src='${ICON_URL}' style='width:100px;height:100px;border-radius:24px;box-shadow:0 8px 24px rgba(0,0,0,0.15);margin-bottom:16px;'/><h2 style='margin:0;color:#1a1a1a;font-size:24px;'>${{ github.event.client_payload.name }}</h2><p style='margin:8px 0 0;color:#666;font-size:14px;'>${{ github.event.client_payload.package_name }}</p></div><div style='background:linear-gradient(135deg,#f8f9fa 0%,#e9ecef 100%);border-radius:16px;padding:24px;margin-bottom:32px;'><table style='width:100%;'><tr><td style='padding:14px 0;border-bottom:1px solid rgba(0,0,0,0.06);'><span style='font-size:20px;margin-left:12px;'>🌐</span><span style='color:#666;font-size:14px;'>כתובת האתר</span></td><td style='padding:14px 0;border-bottom:1px solid rgba(0,0,0,0.06);text-align:left;'><a href='${{ github.event.client_payload.website_url }}' style='color:${PRIMARY_COLOR};text-decoration:none;font-weight:600;font-size:14px;'>${{ github.event.client_payload.website_url }}</a></td></tr><tr><td style='padding:14px 0;'><span style='font-size:20px;margin-left:12px;'>📦</span><span style='color:#666;font-size:14px;'>Package</span></td><td style='padding:14px 0;text-align:left;'><code style='background:white;padding:6px 12px;border-radius:6px;font-size:13px;'>${{ github.event.client_payload.package_name }}</code></td></tr></table></div><div style='text-align:center;margin:40px 0;'><a href='${DOWNLOAD_URL}' style='display:inline-block;background:${PRIMARY_COLOR};color:white;text-decoration:none;padding:18px 56px;border-radius:50px;font-size:18px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,0.2);'>⬇️ הורד ${{ github.event.client_payload.build_format == 'aab' && 'AAB' || 'APK' }}</a></div><div style='background:#ffeef8;padding:24px;border-radius:16px;margin:24px 0;'><h3 style='margin:0 0 16px;color:#1a1a1a;font-size:18px;'>✨ פיצ'רים</h3><div style='text-align:center;'>${FEATURES}</div></div><div style='background:#fff3cd;border-radius:16px;padding:28px;border-left:4px solid #ffc107;'><h3 style='margin:0 0 16px;color:#856404;font-size:18px;'>📖 הוראות התקנה</h3><ol style='margin:0;padding-right:24px;color:#856404;font-size:15px;line-height:2;'><li>הורד את קובץ ה-APK</li><li>פתח את הקובץ</li><li>אשר התקנה</li><li>המתן להתקנה</li><li>תהנה! 🎉</li></ol></div></div><div style='background:linear-gradient(135deg,#2d3748 0%,#1a202c 100%);padding:32px;text-align:center;'><img src='https://res.cloudinary.com/ddsogd7hv/image/upload/v1770576910/Icon2_dvenip.png' style='width:48px;height:48px;border-radius:12px;margin-bottom:16px;'/><p style='margin:0 0 8px;color:white;font-size:16px;'>נבנה ב-<a href='https://web2app-builder.vercel.app/' style='color:#60a5fa;text-decoration:none;font-weight:700;'>Web2App Builder</a></p><p style='margin:0;color:rgba(255,255,255,0.6);font-size:13px;'>הפוך כל אתר לאפליקציה מקצועית</p><div style='margin-top:20px;'><a href='https://web2app-builder.vercel.app/' style='background:rgba(255,255,255,0.1);color:white;text-decoration:none;padding:12px 32px;border-radius:8px;display:inline-block;font-size:14px;'>בקר באתר 🚀</a></div><p style='margin:20px 0 0;color:rgba(255,255,255,0.4);font-size:12px;'>© 2026 Web2App Builder</p></div></div></div></body></html>"
           
           EMAIL_HTML_ESCAPED=$(echo "$EMAIL_HTML" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr -d '\n')
           
           curl -X POST 'https://api.resend.com/emails' \
             -H "Authorization: Bearer ${{ secrets.RESEND_API_KEY }}" \
             -H 'Content-Type: application/json' \
-            -d "{\"from\":\"Web2App Builder <onboarding@resend.dev>\",\"to\":[\"${{ github.event.client_payload.notification_email }}\"],\"subject\":\"🎉 האפליקציה \\\"${{ github.event.client_payload.name }}\\\" שלך מוכנה!\",\"html\":\"${EMAIL_HTML_ESCAPED}\"}"
+            -d "{\"from\":\"Web2App Builder <onboarding@resend.dev>\",\"to\":[\"${{ github.event.client_payload.notification_email }}\"],\"subject\":\"🎉 האפליקציה \\\"${{ github.event.client_payload.name }}\\\" שלך מוכנה! (${{ github.event.client_payload.build_format == 'aab' && 'AAB' || 'APK' }})\",\"html\":\"${EMAIL_HTML_ESCAPED}\"}"
