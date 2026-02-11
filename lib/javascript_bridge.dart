@@ -395,7 +395,7 @@ class JavaScriptBridge {
         shareText = '$text\n$url';
       }
 
-      final result = await Share.share(shareText, subject: subject);
+      final result = await Share.shareWithResult(shareText, subject: subject);
 
       return {
         'success': true,
