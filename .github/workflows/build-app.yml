@@ -76,6 +76,87 @@ jobs:
           # Optimize all icons
           find android/app/src/main/res -name "ic_launcher.png" -exec optipng -o7 {} \;
 
+      - name: Generate Adaptive Icons
+        run: |
+          echo "🎨 Generating adaptive icons..."
+          
+          # Get primary color or use default
+          PRIMARY_COLOR="${{ github.event.client_payload.config.primary_color }}"
+          [ -z "$PRIMARY_COLOR" ] && PRIMARY_COLOR="#FFFFFF"
+          
+          # Create background color resource
+          mkdir -p android/app/src/main/res/values
+          cat > android/app/src/main/res/values/ic_launcher_background.xml << EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="ic_launcher_background">$PRIMARY_COLOR</color>
+          </resources>
+          EOF
+          
+          # Create foreground images (with transparent padding)
+          echo "Creating foreground icons with padding..."
+          convert /tmp/icon.png -bordercolor transparent -border 30% /tmp/icon_fg.png
+          
+          # Generate all densities for foreground
+          convert /tmp/icon_fg.png -resize 108x108 android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png
+          convert /tmp/icon_fg.png -resize 162x162 android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png
+          convert /tmp/icon_fg.png -resize 216x216 android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png
+          convert /tmp/icon_fg.png -resize 324x324 android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png
+          convert /tmp/icon_fg.png -resize 432x432 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
+          
+          # Create adaptive icon XML (for Android 8+)
+          mkdir -p android/app/src/main/res/mipmap-anydpi-v26
+          
+          cat > android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/ic_launcher_background"/>
+              <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+          </adaptive-icon>
+          EOF
+          
+          cat > android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/ic_launcher_background"/>
+              <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+          </adaptive-icon>
+          EOF
+          
+          echo "✅ Adaptive icons created successfully!"
+
+      - name: Optimize All Images
+        run: |
+          echo "🗜️ Optimizing PNG images..."
+          
+          # Install optimizers
+          sudo apt-get install -y optipng pngquant
+          
+          # Count images before
+          IMAGE_COUNT=$(find android/app/src/main/res -name "*.png" | wc -l)
+          echo "Found $IMAGE_COUNT images to optimize"
+          
+          # Get total size before
+          SIZE_BEFORE=$(du -sb android/app/src/main/res | cut -f1)
+          
+          # Optimize with optipng (lossless)
+          echo "Running optipng..."
+          find android/app/src/main/res -name "*.png" -exec optipng -o7 -quiet {} \;
+          
+          # Further compress with pngquant (lossy but high quality)
+          echo "Running pngquant..."
+          find android/app/src/main/res -name "*.png" -exec pngquant --force --ext .png --quality=80-100 {} \;
+          
+          # Get total size after
+          SIZE_AFTER=$(du -sb android/app/src/main/res | cut -f1)
+          
+          # Calculate savings
+          SAVED=$((SIZE_BEFORE - SIZE_AFTER))
+          PERCENT=$((SAVED * 100 / SIZE_BEFORE))
+          
+          echo "✅ Optimization complete!"
+          echo "Saved: $SAVED bytes ($PERCENT%)"
+
       - name: Update Package Name
         run: |
           PKG="${{ github.event.client_payload.package_name }}"
@@ -170,6 +251,10 @@ jobs:
             fi
           done
           
+          # Add privacy URLs
+          PRIVACY_URL="${{ github.event.client_payload.config.privacy_policy_url }}"
+          TERMS_URL="${{ github.event.client_payload.config.terms_url }}"
+              
           # Generate config file
           cat > lib/app_config.dart << EOF
           class AppConfig {
@@ -190,6 +275,10 @@ jobs:
             static const bool enableZoom = ${ZOOM};
             static const bool keepAwake = ${AWAKE};
             static const bool openExternalLinks = ${LINKS};
+
+            // Legal
+            static const String privacyPolicyUrl = '${PRIVACY_URL}';
+            static const String termsUrl = '${TERMS_URL:-}';
           }
           EOF
           
