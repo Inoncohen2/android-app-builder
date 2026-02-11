@@ -58,6 +58,21 @@ jobs:
           NAME="${{ github.event.client_payload.name }}"
           sed -i "s/android:label=\".*\"/android:label=\"$NAME\"/" android/app/src/main/AndroidManifest.xml
 
+      - name: Debug - Show Received Config
+        run: |
+          echo "=========================================="
+          echo "🔍 Debugging Config:"
+          echo "=========================================="
+          echo "Navigation: ${{ github.event.client_payload.config.navigation }}"
+          echo "Pull to Refresh: ${{ github.event.client_payload.config.pull_to_refresh }}"
+          echo "Enable Zoom: ${{ github.event.client_payload.config.enable_zoom }}"
+          echo "Keep Awake: ${{ github.event.client_payload.config.keep_awake }}"
+          echo "External Links: ${{ github.event.client_payload.config.open_external_links }}"
+          echo "Primary Color: ${{ github.event.client_payload.config.primary_color }}"
+          echo "Theme Mode: ${{ github.event.client_payload.config.theme_mode }}"
+          echo "Orientation: ${{ github.event.client_payload.config.orientation }}"
+          echo "=========================================="
+
       - name: Generate Config
         run: |
           # נקה URL מקווים תחתונים
