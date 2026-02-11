@@ -29,7 +29,8 @@ jobs:
       - name: Install ImageMagick
         run: |
           sudo apt-get update
-          sudo apt-get install -y imagemagick optipng
+          sudo apt-get install -y imagemagick optipng pngquant
+          
       # ============================================
       # 🔍 DEBUG - Show what we received
       # ============================================
@@ -55,6 +56,10 @@ jobs:
           echo "Primary Color: ${{ github.event.client_payload.config.primary_color }}"
           echo "Theme Mode: ${{ github.event.client_payload.config.theme_mode }}"
           echo "Orientation: ${{ github.event.client_payload.config.orientation }}"
+          echo ""
+          echo "📋 LEGAL (Optional):"
+          echo "Privacy Policy: ${{ github.event.client_payload.config.privacy_policy_url }}"
+          echo "Terms URL: ${{ github.event.client_payload.config.terms_url }}"
           echo "=========================================="
 
       - name: Download Icon
@@ -72,19 +77,14 @@ jobs:
           convert /tmp/icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
           convert /tmp/icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
-         
-          # Optimize all icons
-          find android/app/src/main/res -name "ic_launcher.png" -exec optipng -o7 {} \;
 
       - name: Generate Adaptive Icons
         run: |
           echo "🎨 Generating adaptive icons..."
           
-          # Get primary color or use default
           PRIMARY_COLOR="${{ github.event.client_payload.config.primary_color }}"
           [ -z "$PRIMARY_COLOR" ] && PRIMARY_COLOR="#FFFFFF"
           
-          # Create background color resource
           mkdir -p android/app/src/main/res/values
           cat > android/app/src/main/res/values/ic_launcher_background.xml << EOF
           <?xml version="1.0" encoding="utf-8"?>
@@ -93,18 +93,15 @@ jobs:
           </resources>
           EOF
           
-          # Create foreground images (with transparent padding)
           echo "Creating foreground icons with padding..."
           convert /tmp/icon.png -bordercolor transparent -border 30% /tmp/icon_fg.png
           
-          # Generate all densities for foreground
           convert /tmp/icon_fg.png -resize 108x108 android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png
           convert /tmp/icon_fg.png -resize 162x162 android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png
           convert /tmp/icon_fg.png -resize 216x216 android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png
           convert /tmp/icon_fg.png -resize 324x324 android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png
           convert /tmp/icon_fg.png -resize 432x432 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
           
-          # Create adaptive icon XML (for Android 8+)
           mkdir -p android/app/src/main/res/mipmap-anydpi-v26
           
           cat > android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml << 'EOF'
@@ -129,33 +126,23 @@ jobs:
         run: |
           echo "🗜️ Optimizing PNG images..."
           
-          # Install optimizers
-          sudo apt-get install -y optipng pngquant
-          
-          # Count images before
           IMAGE_COUNT=$(find android/app/src/main/res -name "*.png" | wc -l)
           echo "Found $IMAGE_COUNT images to optimize"
           
-          # Get total size before
           SIZE_BEFORE=$(du -sb android/app/src/main/res | cut -f1)
           
-          # Optimize with optipng (lossless)
           echo "Running optipng..."
           find android/app/src/main/res -name "*.png" -exec optipng -o7 -quiet {} \;
           
-          # Further compress with pngquant (lossy but high quality)
           echo "Running pngquant..."
           find android/app/src/main/res -name "*.png" -exec pngquant --force --ext .png --quality=80-100 {} \;
           
-          # Get total size after
           SIZE_AFTER=$(du -sb android/app/src/main/res | cut -f1)
-          
-          # Calculate savings
           SAVED=$((SIZE_BEFORE - SIZE_AFTER))
           PERCENT=$((SAVED * 100 / SIZE_BEFORE))
           
           echo "✅ Optimization complete!"
-          echo "Saved: $SAVED bytes ($PERCENT%)"
+          echo "📊 Saved: $SAVED bytes ($PERCENT%)"
 
       - name: Update Package Name
         run: |
@@ -169,51 +156,9 @@ jobs:
         run: |
           NAME="${{ github.event.client_payload.name }}"
           sed -i "s/android:label=\".*\"/android:label=\"$NAME\"/" android/app/src/main/AndroidManifest.xml
-          
-      - name: Download Splash Screen (if enabled)
-        if: ${{ github.event.client_payload.config.splash_screen == 'true' }}
-        run: |
-          mkdir -p assets
-          curl -L -o assets/splash.png "${{ github.event.client_payload.config.splash_url || github.event.client_payload.icon_url }}"
-
-      - name: Generate Splash Screen
-        if: ${{ github.event.client_payload.config.splash_screen == 'true' }}
-        run: |
-          # עדכן flutter_native_splash config
-          SPLASH_COLOR="${{ github.event.client_payload.config.splash_color }}"
-          [ -z "$SPLASH_COLOR" ] && SPLASH_COLOR="#FFFFFF"
-          
-          cat > flutter_native_splash.yaml << EOF
-          flutter_native_splash:
-            color: "$SPLASH_COLOR"
-            color_dark: "#000000"
-            image: assets/splash.png
-            android: true
-            ios: false
-          EOF
-    
-          # צור splash screens
-          flutter pub run flutter_native_splash:create
-          
-      - name: Setup Offline Page
-        run: |
-          mkdir -p assets
-          # offline.html is already in the repo at android/app/src/main/assets/
-          # Flutter will find it automatically
-          echo "✅ Offline page ready"    
-          
-      - name: Debug - Show Config
-        run: |
-          echo "🔍 Config Received:"
-          echo "Navigation: ${{ github.event.client_payload.config.navigation }}"
-          echo "Pull to Refresh: ${{ github.event.client_payload.config.pull_to_refresh }}"
-          echo "Zoom: ${{ github.event.client_payload.config.enable_zoom }}"
-          echo "Keep Awake: ${{ github.event.client_payload.config.keep_awake }}"
-          echo "External Links: ${{ github.event.client_payload.config.open_external_links }}"
-          echo "Splash: ${{ github.event.client_payload.config.splash_screen }}"
 
       # ============================================
-      # ✅ FIXED CONFIG GENERATION
+      # ✅ GENERATE APP CONFIG
       # ============================================
       - name: Generate App Config
         run: |
@@ -234,6 +179,10 @@ jobs:
           THEME="${{ github.event.client_payload.config.theme_mode }}"
           ORIENT="${{ github.event.client_payload.config.orientation }}"
           
+          # Privacy URLs (optional - can be empty)
+          PRIVACY_URL="${{ github.event.client_payload.config.privacy_policy_url }}"
+          TERMS_URL="${{ github.event.client_payload.config.terms_url }}"
+          
           # Set defaults for empty values
           [ -z "$NAV" ] && NAV="true"
           [ -z "$PTR" ] && PTR="true"
@@ -245,6 +194,10 @@ jobs:
           [ -z "$PRIMARY" ] && PRIMARY="#2196F3"
           [ -z "$THEME" ] && THEME="auto"
           [ -z "$ORIENT" ] && ORIENT="auto"
+          
+          # URLs can be empty (not required)
+          [ -z "$PRIVACY_URL" ] && PRIVACY_URL=""
+          [ -z "$TERMS_URL" ] && TERMS_URL=""
           
           # Validate boolean values
           for var_name in "NAV" "PTR" "SPLASH" "ZOOM" "AWAKE" "LINKS"; do
@@ -258,10 +211,6 @@ jobs:
             fi
           done
           
-          # Add privacy URLs
-          PRIVACY_URL="${{ github.event.client_payload.config.privacy_policy_url }}"
-          TERMS_URL="${{ github.event.client_payload.config.terms_url }}"
-              
           # Generate config file
           cat > lib/app_config.dart << EOF
           class AppConfig {
@@ -283,9 +232,9 @@ jobs:
             static const bool keepAwake = ${AWAKE};
             static const bool openExternalLinks = ${LINKS};
 
-            // Legal
+            // Legal (optional - can be empty)
             static const String privacyPolicyUrl = '${PRIVACY_URL}';
-            static const String termsUrl = '${TERMS_URL:-}';
+            static const String termsUrl = '${TERMS_URL}';
           }
           EOF
           
@@ -300,6 +249,8 @@ jobs:
           sed -i "s|\${ZOOM}|${ZOOM}|g" lib/app_config.dart
           sed -i "s|\${AWAKE}|${AWAKE}|g" lib/app_config.dart
           sed -i "s|\${LINKS}|${LINKS}|g" lib/app_config.dart
+          sed -i "s|\${PRIVACY_URL}|${PRIVACY_URL}|g" lib/app_config.dart
+          sed -i "s|\${TERMS_URL}|${TERMS_URL}|g" lib/app_config.dart
           
           echo "=========================================="
           echo "✅ Generated app_config.dart:"
@@ -307,46 +258,143 @@ jobs:
           cat lib/app_config.dart
           echo "=========================================="
 
+      # ============================================
+      # ✅ CREATE SETTINGS SCREEN
+      # ============================================
+      - name: Create Settings Screen
+        run: |
+          echo "📝 Creating settings_screen.dart..."
+          
+          cat > lib/settings_screen.dart << 'DART_EOF'
+          import 'package:flutter/material.dart';
+          import 'package:url_launcher/url_launcher.dart';
+          import 'app_config.dart';
+
+          class SettingsScreen extends StatelessWidget {
+            const SettingsScreen({Key? key}) : super(key: key);
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(
+                  title: const Text('Settings'),
+                ),
+                body: ListView(
+                  children: [
+                    const SizedBox(height: 20),
+                    
+                    // About Section
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Text(
+                        'About',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ListTile(
+                      leading: const Icon(Icons.info_outline),
+                      title: Text(AppConfig.appName),
+                      subtitle: const Text('Version 1.0.0'),
+                    ),
+                    const Divider(),
+                    
+                    // Legal Section (only if URLs provided)
+                    if (AppConfig.privacyPolicyUrl.isNotEmpty || AppConfig.termsUrl.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        child: Text(
+                          'Legal',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      
+                      // Privacy Policy (only if URL provided)
+                      if (AppConfig.privacyPolicyUrl.isNotEmpty)
+                        ListTile(
+                          leading: const Icon(Icons.privacy_tip_outlined),
+                          title: const Text('Privacy Policy'),
+                          trailing: const Icon(Icons.open_in_new, size: 20),
+                          onTap: () => _launchURL(AppConfig.privacyPolicyUrl),
+                        ),
+                      
+                      // Terms of Service (only if URL provided)
+                      if (AppConfig.termsUrl.isNotEmpty)
+                        ListTile(
+                          leading: const Icon(Icons.description_outlined),
+                          title: const Text('Terms of Service'),
+                          trailing: const Icon(Icons.open_in_new, size: 20),
+                          onTap: () => _launchURL(AppConfig.termsUrl),
+                        ),
+                      
+                      const Divider(),
+                    ],
+                    
+                    // Website Link
+                    ListTile(
+                      leading: const Icon(Icons.language),
+                      title: const Text('Visit Website'),
+                      trailing: const Icon(Icons.open_in_new, size: 20),
+                      onTap: () => _launchURL(AppConfig.websiteUrl),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            Future<void> _launchURL(String url) async {
+              if (url.isEmpty) return;
+              final uri = Uri.parse(url);
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalBrowser);
+              }
+            }
+          }
+          DART_EOF
+          
+          echo "✅ settings_screen.dart created!"
+
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Build APK
+      - name: Build APK/AAB
         run: |
           if [ "${{ github.event.client_payload.build_format }}" == "aab" ]; then
+            echo "🏗️ Building AAB..."
             flutter build appbundle --release
             BUILD_FILE="build/app/outputs/bundle/release/app-release.aab"
           else
+            echo "🏗️ Building APK..."
             flutter build apk --release
             BUILD_FILE="build/app/outputs/flutter-apk/app-release.apk"
           fi
           echo "BUILD_FILE=$BUILD_FILE" >> $GITHUB_ENV
+          echo "✅ Build complete!"
 
       - name: Package Source Code
         if: ${{ github.event.client_payload.build_format == 'source' }}
         run: |
-          # Clean unnecessary files
-          rm -rf build/
-          rm -rf .gradle/
-          rm -rf .dart_tool/
-    
-          # Create ZIP
+          rm -rf build/ .gradle/ .dart_tool/
+          
           zip -r android-source.zip . \
-            -x ".git/*" \
-            -x "*.iml" \
-            -x ".idea/*"
-    
-          # Upload to Supabase
+            -x ".git/*" "*.iml" ".idea/*"
+          
           APP_ID="${{ github.event.client_payload.app_id }}"
-    
+          
           curl -X POST \
             "${{ secrets.SUPABASE_URL }}/storage/v1/object/source-code/${APP_ID}.zip" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/zip" \
             --data-binary @android-source.zip
-    
+          
           DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/source-code/${APP_ID}.zip"
-    
-          # Update database
+          
           curl -X PATCH \
             "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${APP_ID}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
@@ -392,6 +440,9 @@ jobs:
           fi
           if [ "${{ github.event.client_payload.config.enable_zoom }}" = "true" ]; then
             FEATURES="${FEATURES}<span style='display:inline-block;background:linear-gradient(135deg,#4facfe 0%,#00f2fe 100%);color:white;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;margin:4px;'>🔍 Zoom</span>"
+          fi
+          if [ "${{ github.event.client_payload.config.splash_screen }}" = "true" ]; then
+            FEATURES="${FEATURES}<span style='display:inline-block;background:linear-gradient(135deg,#fa709a 0%,#fee140 100%);color:white;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;margin:4px;'>✨ Splash</span>"
           fi
           
           # Create beautiful email
