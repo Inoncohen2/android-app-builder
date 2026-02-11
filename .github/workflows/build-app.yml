@@ -57,7 +57,32 @@ jobs:
         run: |
           NAME="${{ github.event.client_payload.name }}"
           sed -i "s/android:label=\".*\"/android:label=\"$NAME\"/" android/app/src/main/AndroidManifest.xml
+          
+      - name: Download Splash Screen (if enabled)
+        if: ${{ github.event.client_payload.config.splash_enabled == 'true' }}
+        run: |
+          mkdir -p assets
+          curl -L -o assets/splash.png "${{ github.event.client_payload.config.splash_url || github.event.client_payload.icon_url }}"
 
+      - name: Generate Splash Screen
+        if: ${{ github.event.client_payload.config.splash_enabled == 'true' }}
+        run: |
+          # עדכן flutter_native_splash config
+          SPLASH_COLOR="${{ github.event.client_payload.config.splash_color }}"
+          [ -z "$SPLASH_COLOR" ] && SPLASH_COLOR="#FFFFFF"
+          
+          cat > flutter_native_splash.yaml << EOF
+          flutter_native_splash:
+            color: "$SPLASH_COLOR"
+            color_dark: "#000000"
+            image: assets/splash.png
+            android: true
+            ios: false
+          EOF
+    
+          # צור splash screens
+          flutter pub run flutter_native_splash:create
+          
       - name: Debug - Show Received Config
         run: |
           echo "=========================================="
