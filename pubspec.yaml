@@ -23,6 +23,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/  
+    - assets/offline.html
 
 flutter_native_splash:
   color: "#FFFFFF"
