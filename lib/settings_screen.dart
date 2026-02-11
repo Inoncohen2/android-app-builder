@@ -38,7 +38,7 @@ class SettingsScreen extends StatelessWidget {
   Future<void> _launchURL(String url) async {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalBrowser);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 }
