@@ -195,6 +195,13 @@ jobs:
           # צור splash screens
           flutter pub run flutter_native_splash:create
           
+      - name: Setup Offline Page
+        run: |
+          mkdir -p assets
+          # offline.html is already in the repo at android/app/src/main/assets/
+          # Flutter will find it automatically
+          echo "✅ Offline page ready"    
+          
       - name: Debug - Show Config
         run: |
           echo "🔍 Config Received:"
