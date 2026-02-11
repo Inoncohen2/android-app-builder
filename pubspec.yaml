@@ -9,9 +9,21 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  
+  # WebView
   webview_flutter: ^4.7.0
+  
+  # Utilities
   wakelock_plus: ^1.1.4
   url_launcher: ^6.2.3
+  
+  # ✅ NEW - JavaScript Bridge Dependencies
+  share_plus: ^7.2.1            # Share functionality
+  vibration: ^1.8.4             # Haptic feedback
+  device_info_plus: ^9.1.1      # Device information
+  package_info_plus: ^5.0.1     # App information
+  
+  # Splash Screen
   flutter_native_splash: ^2.3.9  
 
 dev_dependencies:
