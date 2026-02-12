@@ -7,11 +7,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 🚀 המנוע המהיר (Turbo)
     container:
       image: ghcr.io/cirruslabs/flutter:3.19.0
     
-    timeout-minutes: 20
+    timeout-minutes: 30
     
     env:
       SUPA_URL: ${{ secrets.SUPABASE_URL }}
@@ -26,13 +25,28 @@ jobs:
         uses: actions/checkout@v4
 
       # ============================================
+      # ⚡ SUPER CACHE (חוסך זמן בילד)
+      # ============================================
+      - name: Cache Everything (Gradle, Flutter, Build)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.gradle/android-build-cache
+            /root/.pub-cache
+            build/
+          key: ${{ runner.os }}-mega-cache-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mega-cache-
+
+      # ============================================
       # 🚀 Helper Script & Init (1% - 3%)
       # ============================================
       - name: Create Progress Helper & Start (1%)
         run: |
           cat << 'EOF' > update_progress.sh
           #!/bin/bash
-          # סקריפט שמעדכן גם אחוזים וגם הודעה
           curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.$APP_ID" \
             -H "apikey: $SUPA_KEY" \
             -H "Authorization: Bearer $SUPA_KEY" \
@@ -61,8 +75,6 @@ jobs:
       - name: Install Graphic Tools
         run: |
           ./update_progress.sh 4 "Preparing graphic tools..."
-          
-          # תיאטרון: לולאה שרצה ברקע
           (
             for i in {5..8}; do
               sleep 1
@@ -84,7 +96,7 @@ jobs:
         run: |
           ./update_progress.sh 10 "Downloading app icon..."
           
-          # ✅ תיקון קריטי: יצירת תיקיות בצורה מפורשת (ללא קיצורי דרך)
+          # יצירת תיקיות בצורה מפורשת ובטוחה
           mkdir -p android/app/src/main/res/mipmap-mdpi
           mkdir -p android/app/src/main/res/mipmap-hdpi
           mkdir -p android/app/src/main/res/mipmap-xhdpi
@@ -253,7 +265,6 @@ jobs:
         run: |
           ./update_progress.sh 36 "Preparing source code..."
           
-          # תיאטרון: אריזת קוד מקור
           (
             for i in {37..60}; do
               sleep 0.5
@@ -289,8 +300,6 @@ jobs:
         if: ${{ github.event.client_payload.build_format != 'source' }}
         run: |
           ./update_progress.sh 36 "Fetching Flutter dependencies..."
-          
-          # תיאטרון: הורדת תלויות
           (
             for i in {37..45}; do
               sleep 1
@@ -304,18 +313,37 @@ jobs:
           kill $BG_PID 2>/dev/null || true
           ./update_progress.sh 46 "Dependencies resolved..."
 
-      - name: Build Application
+      - name: Decode Keystore
         if: ${{ github.event.client_payload.build_format != 'source' }}
         run: |
-          ./update_progress.sh 50 "Starting compilation..."
+          ./update_progress.sh 48 "Configuring build environment..."
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+          fi
+
+      - name: Build Application
+        if: ${{ github.event.client_payload.build_format != 'source' }}
+        env:
+          KEYSTORE_PATH: upload-keystore.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./update_progress.sh 50 "Starting compilation (High Performance)..."
           
-          # הגדרות Gradle למהירות
           mkdir -p ~/.gradle
-          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" > ~/.gradle/gradle.properties
+          
+          # הגדרות Gradle להפעלת הקאש האגרסיבי
+          echo "org.gradle.caching=true" > ~/.gradle/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" >> ~/.gradle/gradle.properties
           echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
           echo "org.gradle.daemon=false" >> ~/.gradle/gradle.properties
+          echo "org.gradle.configureondemand=true" >> ~/.gradle/gradle.properties
+          
+          # הגדרת נתיב לקאש המקומי של האפליקציה (חשוב!)
+          mkdir -p ~/.gradle/android-build-cache
+          echo "android.buildCacheDir=/root/.gradle/android-build-cache" >> ~/.gradle/gradle.properties
 
-          # תיאטרון: הבילד הגדול!
           (
             for i in {51..90}; do
               sleep 4
@@ -368,13 +396,15 @@ jobs:
         run: |
           APP_NAME_CLEAN=$(echo "${{ github.event.client_payload.name }}" | tr ' ' '_')
           
-          if [ "${{ github.event.client_payload.build_format }}" == "source" ]; then
+          # ✅ תיקון שגיאת ה-Syntax: השוואה עם = יחיד
+          if [ "${{ github.event.client_payload.build_format }}" = "source" ]; then
              EXT="zip"
              TYPE_NAME="קוד מקור"
              DL_PATH="source-code/${APP_ID}.zip"
           else
              EXT="${{ github.event.client_payload.build_format }}"
-             TYPE_NAME="${EXT^^}"
+             # ✅ תיקון שגיאת ה-Substitution: שימוש ב-tr
+             TYPE_NAME=$(echo "$EXT" | tr '[:lower:]' '[:upper:]')
              DL_PATH="builds/${APP_ID}.${EXT}?download=${APP_NAME_CLEAN}.${EXT}"
           fi
           
