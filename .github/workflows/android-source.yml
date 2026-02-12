@@ -28,7 +28,8 @@ jobs:
       # ==========================================
       - name: 30% - Install Tools & Prepare Assets
         run: |
-          sudo apt-get update > /dev/null && sudo apt-get install -y imagemagick zip > /dev/null
+            sudo apt-get update --fix-missing
+            sudo apt-get install -y --no-install-recommends imagemagick zip
           
           curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?id=eq.${{ github.event.client_payload.app_id }}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
