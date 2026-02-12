@@ -17,7 +17,6 @@ jobs:
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
-            # שינוי: build_message -> source_message
             -d "{\"source_status\": \"processing\", \"source_progress\": 5, \"source_message\": \"Initializing source packager...\"}"
 
       - name: Checkout
