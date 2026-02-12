@@ -13,7 +13,8 @@ jobs:
       # ==========================================
       - name: 5% - Initial Notification
         run: |
-          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+          # תיקון: שינוי מ-app_id ל-id
+          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?id=eq.${{ github.event.client_payload.app_id }}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
@@ -29,7 +30,7 @@ jobs:
         run: |
           sudo apt-get update > /dev/null && sudo apt-get install -y imagemagick zip > /dev/null
           
-          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?id=eq.${{ github.event.client_payload.app_id }}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
@@ -49,7 +50,7 @@ jobs:
       # ==========================================
       - name: 60% - Inject Configuration
         run: |
-          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?id=eq.${{ github.event.client_payload.app_id }}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
@@ -57,22 +58,23 @@ jobs:
           
           CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
           
+          # הזרקה עם התאמה למפתחות ה-JSON החדשים (כמו showNavBar ו-enablePullToRefresh)
           cat > lib/app_config.dart << EOF
           class AppConfig {
             static const String appName = '${{ github.event.client_payload.name }}';
             static const String websiteUrl = '${CLEAN_URL}';
             static const String packageName = '${{ github.event.client_payload.package_name }}';
-            static const String primaryColor = '${{ github.event.client_payload.config.primary_color }}';
-            static const String themeMode = '${{ github.event.client_payload.config.theme_mode }}';
+            static const String primaryColor = '${{ github.event.client_payload.config.primaryColor }}';
+            static const String themeMode = '${{ github.event.client_payload.config.themeMode }}';
             static const String orientation = '${{ github.event.client_payload.config.orientation }}';
-            static const bool showNavigation = ${{ github.event.client_payload.config.navigation }};
-            static const bool pullToRefresh = ${{ github.event.client_payload.config.pull_to_refresh }};
-            static const bool splashScreen = ${{ github.event.client_payload.config.splash_screen }};
-            static const bool enableZoom = ${{ github.event.client_payload.config.enable_zoom }};
-            static const bool keepAwake = ${{ github.event.client_payload.config.keep_awake }};
-            static const bool openExternalLinks = ${{ github.event.client_payload.config.open_external_links }};
-            static const String privacyPolicyUrl = '${{ github.event.client_payload.config.privacy_policy_url }}';
-            static const String termsUrl = '${{ github.event.client_payload.config.terms_url }}';
+            static const bool showNavigation = ${{ github.event.client_payload.config.showNavBar }};
+            static const bool pullToRefresh = ${{ github.event.client_payload.config.enablePullToRefresh }};
+            static const bool splashScreen = ${{ github.event.client_payload.config.showSplashScreen }};
+            static const bool enableZoom = ${{ github.event.client_payload.config.enableZoom }};
+            static const bool keepAwake = ${{ github.event.client_payload.config.keepAwake }};
+            static const bool openExternalLinks = ${{ github.event.client_payload.config.openExternalLinks }};
+            static const String privacyPolicyUrl = '${{ github.event.client_payload.config.privacyPolicyUrl }}';
+            static const String termsUrl = '${{ github.event.client_payload.config.termsOfServiceUrl }}';
           }
           EOF
           
@@ -86,7 +88,7 @@ jobs:
       # ==========================================
       - name: 80% - Zip Source
         run: |
-          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?id=eq.${{ github.event.client_payload.app_id }}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
@@ -111,12 +113,12 @@ jobs:
           APP_ID="${{ github.event.client_payload.app_id }}"
           APP_NAME="${{ github.event.client_payload.name }}"
           DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/source-code/${APP_ID}.zip"
-          PRIMARY_COLOR="${{ github.event.client_payload.config.primary_color }}"
+          PRIMARY_COLOR="${{ github.event.client_payload.config.primaryColor }}"
           [ -z "$PRIMARY_COLOR" ] && PRIMARY_COLOR="#2196F3"
           ICON_URL="${{ github.event.client_payload.icon_url }}"
           
-          # עדכון DB סופי לעמודות הנכונות
-          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${APP_ID}" \
+          # עדכון DB סופי לעמודות הנכונות ושימוש ב-id
+          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?id=eq.${APP_ID}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
