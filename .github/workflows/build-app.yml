@@ -15,7 +15,8 @@ jobs:
     steps:
       - name: Initial Notification
         run: |
-          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+          # תיקון: שינוי מ-app_id ל-id בהתאם לסכמה החדשה
+          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?id=eq.${{ github.event.client_payload.app_id }}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
@@ -31,7 +32,7 @@ jobs:
         id: prep_step
         run: |
           # דיווח התקדמות לעמודות APK
-          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?id=eq.${{ github.event.client_payload.app_id }}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
@@ -40,7 +41,8 @@ jobs:
           mkdir -p android/app/src/main/res/mipmap-xxxhdpi android/app/src/main/res/values
           curl -s -L -o /tmp/icon.png "${{ github.event.client_payload.icon_url }}"
           
-          PRIMARY_COLOR="${{ github.event.client_payload.config.primary_color }}"
+          # התאמת מפתח צבע מהקונפיג
+          PRIMARY_COLOR="${{ github.event.client_payload.config.primaryColor }}"
           [ -z "$PRIMARY_COLOR" ] && PRIMARY_COLOR="#FFFFFF"
           echo "<?xml version='1.0' encoding='utf-8'?><resources><color name='ic_launcher_background'>$PRIMARY_COLOR</color></resources>" > android/app/src/main/res/values/ic_launcher_background.xml
 
@@ -66,22 +68,24 @@ jobs:
           find android/app/src/main/res -name "*.png" -exec optipng -o7 -quiet {} \;
 
           CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
+          
+          # הזרקת קונפיגורציה עם המפתחות הנכונים מה-JSON
           cat > lib/app_config.dart << EOF
           class AppConfig {
             static const String appName = '${{ github.event.client_payload.name }}';
             static const String websiteUrl = '${CLEAN_URL}';
             static const String packageName = '${{ github.event.client_payload.package_name }}';
-            static const String primaryColor = '${{ github.event.client_payload.config.primary_color }}';
-            static const String themeMode = '${{ github.event.client_payload.config.theme_mode }}';
+            static const String primaryColor = '${{ github.event.client_payload.config.primaryColor }}';
+            static const String themeMode = '${{ github.event.client_payload.config.themeMode }}';
             static const String orientation = '${{ github.event.client_payload.config.orientation }}';
-            static const bool showNavigation = ${{ github.event.client_payload.config.navigation }};
-            static const bool pullToRefresh = ${{ github.event.client_payload.config.pull_to_refresh }};
-            static const bool splashScreen = ${{ github.event.client_payload.config.splash_screen }};
-            static const bool enableZoom = ${{ github.event.client_payload.config.enable_zoom }};
-            static const bool keepAwake = ${{ github.event.client_payload.config.keep_awake }};
-            static const bool openExternalLinks = ${{ github.event.client_payload.config.open_external_links }};
-            static const String privacyPolicyUrl = '${{ github.event.client_payload.config.privacy_policy_url }}';
-            static const String termsUrl = '${{ github.event.client_payload.config.terms_url }}';
+            static const bool showNavigation = ${{ github.event.client_payload.config.showNavBar }};
+            static const bool pullToRefresh = ${{ github.event.client_payload.config.enablePullToRefresh }};
+            static const bool splashScreen = ${{ github.event.client_payload.config.showSplashScreen }};
+            static const bool enableZoom = ${{ github.event.client_payload.config.enableZoom }};
+            static const bool keepAwake = ${{ github.event.client_payload.config.keepAwake }};
+            static const bool openExternalLinks = ${{ github.event.client_payload.config.openExternalLinks }};
+            static const String privacyPolicyUrl = '${{ github.event.client_payload.config.privacyPolicyUrl }}';
+            static const String termsUrl = '${{ github.event.client_payload.config.termsOfServiceUrl }}';
           }
           EOF
 
@@ -111,7 +115,7 @@ jobs:
 
           echo "app_name_clean=$(echo '${{ github.event.client_payload.name }}' | tr ' ' '_')" >> $GITHUB_OUTPUT
           
-          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?id=eq.${{ github.event.client_payload.app_id }}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
@@ -167,7 +171,7 @@ jobs:
         run: |
           cat << 'EOF' > update_progress.sh
           #!/bin/sh
-          curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.$APP_ID" \
+          curl -s -X PATCH "$SUPA_URL/rest/v1/apps?id=eq.$APP_ID" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"apk_progress\": $1, \"apk_message\": \"$2\"}" > /dev/null
@@ -214,7 +218,7 @@ jobs:
           
           DOWNLOAD_URL="$SUPA_URL/storage/v1/object/public/builds/${APP_ID}.${FORMAT}?download=${APP_NAME}.${FORMAT}"
           
-          curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.${APP_ID}" \
+          curl -s -X PATCH "$SUPA_URL/rest/v1/apps?id=eq.${APP_ID}" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"apk_status\": \"completed\", \"apk_progress\": 100, \"apk_message\": \"Done!\", \"download_url\": \"${DOWNLOAD_URL}\"}"
