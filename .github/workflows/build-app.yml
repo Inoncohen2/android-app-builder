@@ -5,143 +5,48 @@ on:
     types: [build-app]
 
 jobs:
-  build:
+  # ============================================
+  # ⚡ ג'וב 1: הזנקה מהירה (Instant Start)
+  # הג'וב הזה מתחיל תוך 2-3 שניות ומעדכן את המשתמש מייד.
+  # ============================================
+  prepare:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/cirruslabs/flutter:3.19.0
-    
-    timeout-minutes: 30
-    
-    env:
-      SUPA_URL: ${{ secrets.SUPABASE_URL }}
-      SUPA_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-      APP_ID: ${{ github.event.client_payload.app_id }}
-
+    outputs:
+      app_name_clean: ${{ steps.prep_step.outputs.app_name_clean }}
     steps:
-      - name: Fix Git Permissions
-        run: git config --global --add safe.directory '*'
+      - name: Initial Notification
+        run: |
+          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"progress\": 1, \"build_message\": \"Connecting to build server...\"}"
 
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create Progress Helper & Start (1%)
+      - name: Process Assets & Config
+        id: prep_step
         run: |
-          cat << 'EOF' > update_progress.sh
-          #!/bin/sh
-          curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.$APP_ID" \
-            -H "apikey: $SUPA_KEY" \
-            -H "Authorization: Bearer $SUPA_KEY" \
+          # עדכון התקדמות ל-10%
+          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
-            -d "{\"progress\": $1, \"build_message\": \"$2\"}" > /dev/null
-          EOF
-          chmod +x update_progress.sh
-          ./update_progress.sh 1 "Initializing build process..."
+            -d "{\"progress\": 10, \"build_message\": \"Processing app assets and icons...\"}"
 
-      - name: Report Run ID (2%)
-        run: |
-          curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.$APP_ID" \
-            -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{\"github_run_id\": \"${{ github.run_id }}\"}" > /dev/null
-          ./update_progress.sh 2 "Allocating server resources..."
-
-      - name: Cache Gradle & Build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            ~/.gradle/android-build-cache
-            /root/.pub-cache
-            build/
-          key: ${{ runner.os }}-mega-cache-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-mega-cache-
-
-      - name: Verify Environment (3%)
-        run: ./update_progress.sh 3 "Restoring cached resources..."
-
-      - name: Before Flutter Setup (Start Ticker)
-        run: |
-          ./update_progress.sh 4 "Verifying Flutter SDK..."
-          (
-            i=5
-            while [ $i -le 11 ]; do
-              ./update_progress.sh $i "Optimizing framework ($i%)..."
-              sleep 1
-              i=$((i + 1))
-            done
-          ) &
-          echo "FLUTTER_PID=$!" >> $GITHUB_ENV
-
-      - name: Setup Flutter (Verified)
-        run: flutter --version
-
-      - name: After Flutter Setup (12%)
-        run: |
-          [ -n "$FLUTTER_PID" ] && kill $FLUTTER_PID 2>/dev/null || true
-          ./update_progress.sh 12 "Flutter engine ready..."
-
-      - name: Install ImageMagick & Tools
-        run: |
-          ./update_progress.sh 13 "Preparing image processing tools..."
-          (
-            i=14
-            while [ $i -le 17 ]; do
-              ./update_progress.sh $i "Installing system packages ($i%)..."
-              sleep 1
-              i=$((i + 1))
-            done
-          ) &
-          BG_PID=$!
-          sudo apt-get update > /dev/null 2>&1
-          sudo apt-get install -y imagemagick optipng pngquant zip > /dev/null 2>&1
-          kill $BG_PID 2>/dev/null || true
-          ./update_progress.sh 18 "System tools ready..."
-
-      - name: Download Icon & Process (20% - 25%)
-        run: |
-          ./update_progress.sh 20 "Downloading app icon..."
+          # יצירת התיקייה לאייקונים
           mkdir -p android/app/src/main/res/mipmap-mdpi android/app/src/main/res/mipmap-hdpi android/app/src/main/res/mipmap-xhdpi android/app/src/main/res/mipmap-xxhdpi android/app/src/main/res/mipmap-xxxhdpi
-          curl -s -L -o /tmp/icon.png "${{ github.event.client_payload.icon_url }}"
           
-          ./update_progress.sh 21 "Resizing icons..."
+          # הורדה והמרת אייקונים
+          curl -s -L -o /tmp/icon.png "${{ github.event.client_payload.icon_url }}"
           convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
           convert /tmp/icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
 
-          PRIMARY_COLOR="${{ github.event.client_payload.config.primary_color }}"
-          [ -z "$PRIMARY_COLOR" ] && PRIMARY_COLOR="#FFFFFF"
-          mkdir -p android/app/src/main/res/values
-          echo "<?xml version='1.0' encoding='utf-8'?><resources><color name='ic_launcher_background'>$PRIMARY_COLOR</color></resources>" > android/app/src/main/res/values/ic_launcher_background.xml
-          
-          convert /tmp/icon.png -bordercolor transparent -border 30% /tmp/icon_fg.png
-          convert /tmp/icon_fg.png -resize 108x108 android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png
-          convert /tmp/icon_fg.png -resize 162x162 android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png
-          convert /tmp/icon_fg.png -resize 216x216 android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png
-          convert /tmp/icon_fg.png -resize 324x324 android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png
-          convert /tmp/icon_fg.png -resize 432x432 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
-          
-          mkdir -p android/app/src/main/res/mipmap-anydpi-v26
-          ICON_XML="<?xml version='1.0' encoding='utf-8'?><adaptive-icon xmlns:android='http://schemas.android.com/apk/res/android'><background android:drawable='@color/ic_launcher_background'/><foreground android:drawable='@mipmap/ic_launcher_foreground'/></adaptive-icon>"
-          echo "$ICON_XML" > android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
-          echo "$ICON_XML" > android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
-          ./update_progress.sh 25 "Icons processing complete..."
-
-      - name: Apply Configurations (30% - 41%)
-        run: |
-          ./update_progress.sh 30 "Injecting package name..."
-          PKG="${{ github.event.client_payload.package_name }}"
-          NAME="${{ github.event.client_payload.name }}"
-          sed -i "s/package=\".*\"/package=\"$PKG\"/" android/app/src/main/AndroidManifest.xml
-          sed -i "s/namespace \".*\"/namespace \"$PKG\"/" android/app/build.gradle
-          sed -i "s/applicationId \".*\"/applicationId \"$PKG\"/" android/app/build.gradle
-          sed -i "s/^package .*/package $PKG/" android/app/src/main/kotlin/com/example/app/MainActivity.kt
-          sed -i "s/android:label=\".*\"/android:label=\"$NAME\"/" android/app/src/main/AndroidManifest.xml
-
-          ./update_progress.sh 35 "Generating AppConfig..."
+          # יצירת קובץ הגדרות האפליקציה (Dart)
           CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
           cat > lib/app_config.dart << EOF
           class AppConfig {
@@ -161,39 +66,114 @@ jobs:
             static const String termsUrl = '${{ github.event.client_payload.config.terms_url }}';
           }
           EOF
-          ./update_progress.sh 41 "Configuration applied..."
 
-      - name: Install Dependencies
-        if: ${{ github.event.client_payload.build_format != 'source' }}
+          echo "app_name_clean=$(echo '${{ github.event.client_payload.name }}' | tr ' ' '_')" >> $GITHUB_OUTPUT
+          
+          # סיום שלב ההכנה - 35%
+          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"progress\": 35, \"build_message\": \"Assets ready, launching build engine...\"}"
+
+      - name: Upload Prepared Files
+        uses: actions/upload-artifact@v4
+        with:
+          name: prep-files
+          path: |
+            android/app/src/main/res/
+            lib/app_config.dart
+
+  # ============================================
+  # 🏗️ ג'וב 2: הבנייה (החלק הכבד)
+  # הג'וב הזה כולל קאש מורחב ל-SDK ו-Gradle
+  # ============================================
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cirruslabs/flutter:3.19.0
+    
+    env:
+      SUPA_URL: ${{ secrets.SUPABASE_URL }}
+      SUPA_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      APP_ID: ${{ github.event.client_payload.app_id }}
+
+    steps:
+      - name: Fix Git Permissions
+        run: git config --global --add safe.directory '*'
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Prepared Files
+        uses: actions/download-artifact@v4
+        with:
+          name: prep-files
+
+      # ============================================
+      # ⚡ MEGA CACHE V3 (כולל Android SDK)
+      # ============================================
+      - name: Mega Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.gradle/android-build-cache
+            /root/.pub-cache
+            /opt/android-sdk-linux/platforms
+            /opt/android-sdk-linux/build-tools
+            build/
+          key: ${{ runner.os }}-mega-v3-${{ hashFiles('**/*.gradle*', 'pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mega-v3-
+
+      - name: Create Progress Helper
         run: |
-          ./update_progress.sh 42 "Fetching dependencies..."
-          flutter pub get
-          ./update_progress.sh 50 "Dependencies ready..."
+          cat << 'EOF' > update_progress.sh
+          #!/bin/sh
+          curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.$APP_ID" \
+            -H "apikey: $SUPA_KEY" \
+            -H "Authorization: Bearer $SUPA_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"progress\": $1, \"build_message\": \"$2\"}" > /dev/null
+          EOF
+          chmod +x update_progress.sh
+          ./update_progress.sh 40 "Build engine initialized..."
+
+      - name: Pre-warm SDK & Dependencies
+        run: |
+          ./update_progress.sh 45 "Warming up Android environment..."
+          # הורדת רכיבי אנדרואיד חסרים בבת אחת
+          flutter precache --android --no-universal
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
 
       - name: Build Application
-        if: ${{ github.event.client_payload.build_format != 'source' }}
         run: |
-          ./update_progress.sh 51 "Starting compilation (High Performance)..."
-          
-          mkdir -p ~/.gradle
-          echo "org.gradle.caching=true" > ~/.gradle/gradle.properties
-          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" >> ~/.gradle/gradle.properties
-          echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
-          echo "android.buildCacheDir=/root/.gradle/android-build-cache" >> ~/.gradle/gradle.properties
-
+          # לולאת אחוזים (תיאטרון) חסינת שגיאות sh
           (
-            i=52
+            i=50
             while [ $i -le 90 ]; do
-              if [ $i -lt 65 ]; then MSG="Compiling Dart ($i%)...";
-              elif [ $i -lt 80 ]; then MSG="Building native ($i%)...";
-              else MSG="Assembling package ($i%)..."; fi
+              if [ $i -lt 65 ]; then MSG="Compiling Dart code ($i%)...";
+              elif [ $i -lt 80 ]; then MSG="Building native components ($i%)...";
+              else MSG="Assembling final package ($i%)..."; fi
               ./update_progress.sh $i "$MSG"
-              sleep 4
+              sleep 6
               i=$((i + 1))
             done
           ) &
           BG_PID=$!
 
+          # הגדרות Gradle למהירות מקסימלית
+          mkdir -p ~/.gradle
+          echo "org.gradle.caching=true" > ~/.gradle/gradle.properties
+          echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g" >> ~/.gradle/gradle.properties
+          echo "android.buildCacheDir=/root/.gradle/android-build-cache" >> ~/.gradle/gradle.properties
+
+          flutter pub get
+          
           if [ "${{ github.event.client_payload.build_format }}" = "aab" ]; then
             flutter build appbundle --release
             BUILD_FILE="build/app/outputs/bundle/release/app-release.aab"
@@ -201,46 +181,44 @@ jobs:
             flutter build apk --release
             BUILD_FILE="build/app/outputs/flutter-apk/app-release.apk"
           fi
-          echo "BUILD_FILE=$BUILD_FILE" >> $GITHUB_ENV
+          
           kill $BG_PID 2>/dev/null || true
-          ./update_progress.sh 91 "App compiled successfully!"
+          echo "BUILD_FILE=$BUILD_FILE" >> $GITHUB_ENV
+          ./update_progress.sh 91 "Application compiled successfully!"
 
-      - name: Package Source Code
-        if: ${{ github.event.client_payload.build_format == 'source' }}
+      - name: Cache Cleanup
+        if: always()
         run: |
-          ./update_progress.sh 92 "Zipping source code..."
-          rm -rf build/ .gradle/ .dart_tool/
-          zip -r android-source.zip . -x ".git/*" "*.iml" ".idea/*"
-          curl -s -X POST "$SUPA_URL/storage/v1/object/source-code/${APP_ID}.zip" -H "Authorization: Bearer $SUPA_KEY" -H "Content-Type: application/zip" --data-binary @android-source.zip
-          DOWNLOAD_URL="$SUPA_URL/storage/v1/object/public/source-code/${APP_ID}.zip"
-          curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.${APP_ID}" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" -H "Content-Type: application/json" -d "{\"status\": \"completed\", \"progress\": 100, \"source_url\": \"${DOWNLOAD_URL}\"}"
+          # ניקוי קבצי זמניים כדי שהקאש לא יתנפח מעל 10GB
+          rm -rf build/app/outputs/flutter-apk/*.sha1
+          find ~/.gradle/caches -name "*.lock" -type f -delete
 
       - name: Upload Binary & Complete
-        if: ${{ github.event.client_payload.build_format != 'source' }}
         run: |
-          ./update_progress.sh 94 "Preparing final upload..."
+          ./update_progress.sh 95 "Uploading to secure storage..."
           FORMAT="${{ github.event.client_payload.build_format }}"
-          APP_NAME_CLEAN=$(echo "${{ github.event.client_payload.name }}" | tr ' ' '_')
+          APP_NAME="${{ needs.prepare.outputs.app_name_clean }}"
+          
           curl -s -X POST "$SUPA_URL/storage/v1/object/builds/${APP_ID}.${FORMAT}" \
             -H "Authorization: Bearer $SUPA_KEY" \
             -H "Content-Type: application/octet-stream" \
             --data-binary @"$BUILD_FILE"
-          DOWNLOAD_URL="$SUPA_URL/storage/v1/object/public/builds/${APP_ID}.${FORMAT}?download=${APP_NAME_CLEAN}.${FORMAT}"
+          
+          DOWNLOAD_URL="$SUPA_URL/storage/v1/object/public/builds/${APP_ID}.${FORMAT}?download=${APP_NAME}.${FORMAT}"
+          
           curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.${APP_ID}" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"status\": \"completed\", \"progress\": 100, \"build_message\": \"Build completed!\", \"download_url\": \"${DOWNLOAD_URL}\"}"
 
-      - name: Send Email
+      - name: Send Email Notification
         run: |
-          APP_NAME_CLEAN=$(echo "${{ github.event.client_payload.name }}" | tr ' ' '_')
-          if [ "${{ github.event.client_payload.build_format }}" = "source" ]; then
-             DL_PATH="source-code/${APP_ID}.zip"
-             TYPE="Source Code"
-          else
-             EXT="${{ github.event.client_payload.build_format }}"
-             DL_PATH="builds/${APP_ID}.${EXT}?download=${APP_NAME_CLEAN}.${EXT}"
-             TYPE=$(echo "$EXT" | tr '[:lower:]' '[:upper:]')
-          fi
-          DOWNLOAD_URL="$SUPA_URL/storage/v1/object/public/${DL_PATH}"
-          curl -s -X POST 'https://api.resend.com/emails' -H "Authorization: Bearer ${{ secrets.RESEND_API_KEY }}" -H 'Content-Type: application/json' -d "{\"from\":\"Web2App Builder <onboarding@resend.dev>\",\"to\":[\"${{ github.event.client_payload.notification_email }}\"],\"subject\":\"🎉 האפליקציה שלך מוכנה! ($TYPE)\",\"html\":\"<html><body><h1>האפליקציה שלך מוכנה!</h1><p>שם: ${{ github.event.client_payload.name }}</p><a href='$DOWNLOAD_URL'>לחץ כאן להורדה</a></body></html>\"}"
+          APP_NAME="${{ needs.prepare.outputs.app_name_clean }}"
+          FORMAT="${{ github.event.client_payload.build_format }}"
+          TYPE_NAME=$(echo "$FORMAT" | tr '[:lower:]' '[:upper:]')
+          DOWNLOAD_URL="$SUPA_URL/storage/v1/object/public/builds/${APP_ID}.${FORMAT}?download=${APP_NAME}.${FORMAT}"
+          
+          curl -s -X POST 'https://api.resend.com/emails' \
+            -H "Authorization: Bearer ${{ secrets.RESEND_API_KEY }}" \
+            -H 'Content-Type: application/json' \
+            -d "{\"from\":\"Web2App Builder <onboarding@resend.dev>\",\"to\":[\"${{ github.event.client_payload.notification_email }}\"],\"subject\":\"🎉 האפליקציה שלך מוכנה! (${TYPE_NAME})\",\"html\":\"<html><body dir='rtl' style='font-family:sans-serif;'><h2>האפליקציה שלך מוכנה!</h2><p>הבנייה של <b>${{ github.event.client_payload.name }}</b> הסתיימה בהצלחה.</p><a href='$DOWNLOAD_URL' style='background:#2196F3;color:white;padding:10px 20px;text-decoration:none;border-radius:5px;'>לחץ כאן להורדה</a></body></html>\"}"
