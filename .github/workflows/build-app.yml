@@ -24,6 +24,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # תיקון הכרחי: התקנת כלים גרפיים להמרת האייקון
       - name: Install Graphic Tools
         run: |
           sudo apt-get update > /dev/null 2>&1
@@ -84,7 +85,7 @@ jobs:
             lib/app_config.dart
 
   # ============================================
-  # 🏗️ ג'וב 2: הבנייה (החלק הכבד)
+  # 🏗️ ג'וב 2: הבנייה (החלק הכבד בטורבו)
   # ============================================
   build:
     needs: prepare
@@ -109,6 +110,7 @@ jobs:
         with:
           name: prep-files
 
+      # מפתח קאש חדש כדי לאפס שגיאות קודמות ולשמור SDK תקין
       - name: Mega Cache
         uses: actions/cache@v4
         with:
@@ -120,9 +122,9 @@ jobs:
             /opt/android-sdk-linux/platforms
             /opt/android-sdk-linux/build-tools
             build/
-          key: ${{ runner.os }}-mega-v10-${{ hashFiles('**/*.gradle*', 'pubspec.lock') }}
+          key: ${{ runner.os }}-mega-v11-${{ hashFiles('**/*.gradle*', 'pubspec.lock') }}
           restore-keys: |
-            ${{ runner.os }}-mega-v10-
+            ${{ runner.os }}-mega-v11-
 
       - name: Create Progress Helper
         run: |
@@ -135,6 +137,7 @@ jobs:
             -d "{\"progress\": $1, \"build_message\": \"$2\"}" > /dev/null
           EOF
           chmod +x update_progress.sh
+          ./update_progress.sh 40 "Build engine initialized..."
 
       - name: Pre-warm SDK & Dependencies
         run: |
@@ -144,6 +147,7 @@ jobs:
 
       - name: Build Application
         run: |
+          # תיקון לולאת אחוזים תואמת sh למניעת שגיאת Illegal number
           (
             i=50
             while [ $i -le 90 ]; do
@@ -164,6 +168,7 @@ jobs:
 
           flutter pub get
           
+          # בנייה מהירה ללא בדיקת pub חוזרת
           if [ "${{ github.event.client_payload.build_format }}" = "aab" ]; then
             flutter build appbundle --release --no-pub
             BUILD_FILE="build/app/outputs/bundle/release/app-release.aab"
@@ -179,6 +184,8 @@ jobs:
       - name: Cache Cleanup
         if: always()
         run: |
+          # מניעת שגיאות בנתיבי ניקוי
+          rm -rf build/app/outputs/flutter-apk/*.sha1 || true
           [ -d ~/.gradle/caches ] && find ~/.gradle/caches -name "*.lock" -type f -delete 2>/dev/null || true
 
       - name: Upload Binary & Complete
@@ -187,6 +194,7 @@ jobs:
           FORMAT="${{ github.event.client_payload.build_format }}"
           APP_NAME="${{ needs.prepare.outputs.app_name_clean }}"
           
+          # ✅ תיקון שגיאת ה-409: הוספת x-upsert מאפשר דריסת קובץ קיים
           curl -s -X POST "$SUPA_URL/storage/v1/object/builds/${APP_ID}.${FORMAT}" \
             -H "Authorization: Bearer $SUPA_KEY" \
             -H "x-upsert: true" \
