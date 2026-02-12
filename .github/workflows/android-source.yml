@@ -17,7 +17,7 @@ jobs:
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
-            -d "{\"android_source_status\": \"processing\", \"source_progress\": 5, \"source_message\": \"Initializing source packager...\"}"
+            -d "{\"android_source_status\": \"processing\", \"android_source_progress\": 5, \"android_source_message\": \"Initializing source packager...\"}"
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,7 +33,7 @@ jobs:
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
-            -d "{\"source_progress\": 30, \"source_message\": \"Processing icons and assets...\"}"
+            -d "{\"android_source_progress\": 30, \"android_source_message\": \"Processing icons and assets...\"}"
 
           mkdir -p android/app/src/main/res/mipmap-mdpi android/app/src/main/res/mipmap-hdpi android/app/src/main/res/mipmap-xhdpi android/app/src/main/res/mipmap-xxhdpi android/app/src/main/res/mipmap-xxxhdpi
           
@@ -53,7 +53,7 @@ jobs:
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
-            -d "{\"source_progress\": 60, \"source_message\": \"Writing configuration files...\"}"
+            -d "{\"android_source_progress\": 60, \"android_source_message\": \"Writing configuration files...\"}"
           
           CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
           
@@ -90,7 +90,7 @@ jobs:
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
-            -d "{\"source_progress\": 80, \"source_message\": \"Compressing source code...\"}"
+            -d "{\"android_source_progress\": 80, \"android_source_message\": \"Compressing source code...\"}"
           
           zip -r source_code.zip . -x ".git/*" ".github/*" "build/*" ".dart_tool/*" ".idea/*" "**/*.iml" "android/.gradle/*"
 
@@ -115,14 +115,14 @@ jobs:
           [ -z "$PRIMARY_COLOR" ] && PRIMARY_COLOR="#2196F3"
           ICON_URL="${{ github.event.client_payload.icon_url }}"
           
-          # עדכון DB סופי
+          # עדכון DB סופי לעמודות הנכונות
           curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${APP_ID}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
-            -d "{\"android_source_status\": \"completed\", \"source_progress\": 100, \"source_url\": \"${DOWNLOAD_URL}\", \"source_message\": \"Source code ready!\"}"
+            -d "{\"android_source_status\": \"completed\", \"android_source_progress\": 100, \"android_source_url\": \"${DOWNLOAD_URL}\", \"android_source_message\": \"Source code ready!\"}"
 
-          # יצירת מייל HTML מושקע ומקצועי למפתחים
+          # יצירת מייל HTML מושקע
           EMAIL_HTML="<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'></head><body style='margin:0;padding:0;font-family:Arial,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);'><div style='max-width:650px;margin:40px auto;padding:0 20px;'><div style='text-align:center;margin-bottom:24px;'><img src='https://res.cloudinary.com/ddsogd7hv/image/upload/v1770576910/Icon2_dvenip.png' style='width:80px;height:80px;border-radius:20px;box-shadow:0 8px 24px rgba(0,0,0,0.2);'/><div style='margin-top:12px;'><a href='https://web2app-builder.vercel.app/' style='color:white;text-decoration:none;font-size:24px;font-weight:700;'>Web2App Builder</a></div></div><div style='background:white;border-radius:24px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3);'><div style='background:${PRIMARY_COLOR};padding:48px 32px;text-align:center;'><div style='font-size:64px;margin-bottom:16px;'>💻</div><h1 style='margin:0;color:white;font-size:28px;'>קוד המקור מוכן! 🚀</h1><p style='margin:16px 0 0;color:rgba(255,255,255,0.95);'>הקבצים נארזו ומוכנים לפיתוח</p></div><div style='padding:40px 32px;'><div style='text-align:center;margin-bottom:32px;'><img src='${ICON_URL}' style='width:100px;height:100px;border-radius:24px;box-shadow:0 8px 24px rgba(0,0,0,0.15);margin-bottom:16px;'/><h2 style='margin:0;color:#1a1a1a;font-size:24px;'>${{ github.event.client_payload.name }}</h2><p style='margin:8px 0 0;color:#666;font-size:14px;'>Source Code Package (ZIP)</p></div><div style='background:linear-gradient(135deg,#f8f9fa 0%,#e9ecef 100%);border-radius:16px;padding:24px;margin-bottom:32px;'><table style='width:100%;'><tr><td style='padding:14px 0;border-bottom:1px solid rgba(0,0,0,0.06);'><span style='font-size:20px;margin-left:12px;'>📦</span><span style='color:#666;font-size:14px;'>Package Name</span></td><td style='padding:14px 0;border-bottom:1px solid rgba(0,0,0,0.06);text-align:left;'><code style='background:white;padding:6px 12px;border-radius:6px;font-size:13px;'>${{ github.event.client_payload.package_name }}</code></td></tr></table></div><div style='text-align:center;margin:40px 0;'><a href='${DOWNLOAD_URL}' style='display:inline-block;background:${PRIMARY_COLOR};color:white;text-decoration:none;padding:18px 56px;border-radius:50px;font-size:18px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,0.2);'>⬇️ הורד קוד מקור (ZIP)</a></div><div style='background:#e3f2fd;border-radius:16px;padding:28px;border-left:4px solid #2196F3;'><h3 style='margin:0 0 16px;color:#0d47a1;font-size:18px;'>🛠️ הוראות למפתחים</h3><ol style='margin:0;padding-right:24px;color:#0d47a1;font-size:15px;line-height:2;'><li>חלץ את קובץ ה-ZIP</li><li>פתח ב-Android Studio או VS Code</li><li>הרץ בטרמינל: <code>flutter pub get</code></li><li>התחל לפתח!</li></ol></div></div><div style='background:linear-gradient(135deg,#2d3748 0%,#1a202c 100%);padding:32px;text-align:center;'><p style='margin:0 0 8px;color:white;font-size:16px;'>נבנה ב-<b>Web2App Builder</b></p><p style='margin:0;color:rgba(255,255,255,0.6);font-size:13px;'>הפוך כל אתר לאפליקציה מקצועית</p></div></div></div></body></html>"
           
           EMAIL_HTML_ESCAPED=$(echo "$EMAIL_HTML" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr -d '\n')
