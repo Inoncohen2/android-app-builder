@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Initial Notification
         run: |
-          # תיקון: שימוש ב-id=eq. ובעמודות progress ו-build_message לפי הסכימה
+          # תיקון: שימוש ב-id=eq (מפתח ראשי) ובעמודות progress ו-build_message מהסכימה
           curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?id=eq.${{ github.event.client_payload.app_id }}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
@@ -27,27 +27,25 @@ jobs:
 
       - name: Install Graphic Tools
         run: |
-          # התקנה חסינה למניעת Exit code 3 בשלב עדכון החבילות 
           sudo apt-get update --fix-missing
           sudo apt-get install -y --no-install-recommends imagemagick optipng pngquant zip
 
       - name: Process Assets & Config
         id: prep_step
         run: |
-          # דיווח התקדמות
+          # דיווח התקדמות לעמודות הכלליות בסכימה
           curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?id=eq.${{ github.event.client_payload.app_id }}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
             -d "{\"progress\": 10, \"build_message\": \"Generating adaptive icons...\"}"
 
-          # 1. יצירת אייקונים אדפטיביים
           mkdir -p android/app/src/main/res/mipmap-xxxhdpi android/app/src/main/res/values
           
-          # תיקון קריטי: משיכת האייקון מ-config.appIcon כי icon_url הראשי ריק וגורם לשגיאה 3 
+          # תיקון קריטי: משיכת האייקון מ-appIcon (במקום icon_url הריק) למניעת שגיאה 3
           curl -s -L -o /tmp/icon.png "${{ github.event.client_payload.config.appIcon }}"
           
-          # צבע רקע לאייקון מהקונפיג
+          # צבע רקע לאייקון (שימוש ב-primaryColor מה-config)
           PRIMARY_COLOR="${{ github.event.client_payload.config.primaryColor }}"
           [ -z "$PRIMARY_COLOR" ] && PRIMARY_COLOR="#FFFFFF"
           echo "<?xml version='1.0' encoding='utf-8'?><resources><color name='ic_launcher_background'>$PRIMARY_COLOR</color></resources>" > android/app/src/main/res/values/ic_launcher_background.xml
@@ -55,7 +53,7 @@ jobs:
           # יצירת Foreground (לוגו שקוף)
           convert /tmp/icon.png -bordercolor transparent -border 30% /tmp/icon_fg.png
           
-          # יצירת כל הגדלים
+          # יצירת כל הגדלים ל-Foreground
           mkdir -p android/app/src/main/res/mipmap-mdpi android/app/src/main/res/mipmap-hdpi android/app/src/main/res/mipmap-xhdpi android/app/src/main/res/mipmap-xxhdpi android/app/src/main/res/mipmap-xxxhdpi
           convert /tmp/icon_fg.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png
           convert /tmp/icon_fg.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png
@@ -63,12 +61,12 @@ jobs:
           convert /tmp/icon_fg.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png
           convert /tmp/icon_fg.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
 
-          # יצירת ה-XML
+          # יצירת ה-XML שמחבר ביניהם
           mkdir -p android/app/src/main/res/mipmap-anydpi-v26
           echo '<?xml version="1.0" encoding="utf-8"?><adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/ic_launcher_background"/><foreground android:drawable="@mipmap/ic_launcher_foreground"/></adaptive-icon>' > android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
           cp android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
 
-          # אייקונים רגילים (Legacy)
+          # יצירת אייקונים רגילים (Legacy) למכשירים ישנים
           convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
@@ -78,7 +76,7 @@ jobs:
           # אופטימיזציה של תמונות
           find android/app/src/main/res -name "*.png" -exec optipng -o7 -quiet {} \;
 
-          # 3. יצירת קובץ קונפיגורציה (מיפוי מפתחות JSON)
+          # 3. יצירת קובץ קונפיגורציה (מיפוי למפתחות ה-JSON המדויקים ב-Payload)
           CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
           cat > lib/app_config.dart << EOF
           class AppConfig {
@@ -88,12 +86,12 @@ jobs:
             static const String primaryColor = '${{ github.event.client_payload.config.primaryColor }}';
             static const String themeMode = '${{ github.event.client_payload.config.themeMode }}';
             static const String orientation = '${{ github.event.client_payload.config.orientation }}';
-            static const bool showNavigation = ${{ github.event.client_payload.config.showNavBar }};
-            static const bool pullToRefresh = ${{ github.event.client_payload.config.enablePullToRefresh }};
-            static const bool splashScreen = ${{ github.event.client_payload.config.showSplashScreen }};
-            static const bool enableZoom = ${{ github.event.client_payload.config.enableZoom }};
-            static const bool keepAwake = ${{ github.event.client_payload.config.keepAwake }};
-            static const bool openExternalLinks = ${{ github.event.client_payload.config.openExternalLinks }};
+            static const bool showNavigation = ${{ github.event.client_payload.config.showNavBar || 'true' }};
+            static const bool pullToRefresh = ${{ github.event.client_payload.config.enablePullToRefresh || 'true' }};
+            static const bool splashScreen = ${{ github.event.client_payload.config.showSplashScreen || 'true' }};
+            static const bool enableZoom = ${{ github.event.client_payload.config.enableZoom || 'false' }};
+            static const bool keepAwake = ${{ github.event.client_payload.config.keepAwake || 'false' }};
+            static const bool openExternalLinks = ${{ github.event.client_payload.config.openExternalLinks || 'true' }};
             static const String privacyPolicyUrl = '${{ github.event.client_payload.config.privacyPolicyUrl }}';
             static const String termsUrl = '${{ github.event.client_payload.config.termsOfServiceUrl }}';
           }
@@ -167,17 +165,6 @@ jobs:
         with:
           name: prep-files
 
-      - name: Mega Cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            ~/.pub-cache
-            build/
-          key: ${{ runner.os }}-mega-v10-${{ hashFiles('**/*.gradle*', 'pubspec.lock') }}
-          restore-keys: ${{ runner.os }}-mega-v10-
-
       - name: Create Progress Helper
         run: |
           cat << 'EOF' > update_progress.sh
@@ -189,22 +176,9 @@ jobs:
           EOF
           chmod +x update_progress.sh
 
-      - name: Pre-warm & Build
+      - name: Build
         run: |
-          ./update_progress.sh 40 "Warming up build engine..."
-          flutter precache --android --no-universal
-          
-          (
-            for i in $(seq 45 90); do
-              sleep 5
-              if [ $i -lt 65 ]; then MSG="Compiling Dart code ($i%)...";
-              elif [ $i -lt 80 ]; then MSG="Building native components ($i%)...";
-              else MSG="Assembling final package ($i%)..."; fi
-              ./update_progress.sh $i "$MSG"
-            done
-          ) &
-          BG_PID=$!
-
+          ./update_progress.sh 50 "Compiling application..."
           flutter pub get
           if [ "${{ github.event.client_payload.build_format }}" = "aab" ]; then
             flutter build appbundle --release --no-pub
@@ -213,8 +187,6 @@ jobs:
             flutter build apk --release --no-pub
             echo "BUILD_FILE=build/app/outputs/flutter-apk/app-release.apk" >> $GITHUB_ENV
           fi
-
-          kill $BG_PID 2>/dev/null || true
           ./update_progress.sh 92 "Compilation finished!"
 
       - name: Upload Binary
