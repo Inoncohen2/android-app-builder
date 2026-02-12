@@ -14,17 +14,26 @@ jobs:
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
-            -d "{\"progress\": 10, \"build_message\": \"Starting source code packaging...\"}"
+            -d "{\"progress\": 5, \"build_message\": \"Preparing professional source package...\"}"
 
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Prepare Files
+      - name: Install Tools
+        run: sudo apt-get update && sudo apt-get install -y imagemagick zip
+
+      - name: Generate Assets & Config
         run: |
-          # ניקוי תיקיות זמניות אם קיימות
-          rm -rf build/ .gradle/ .dart_tool/
-          
-          # יצירת קובץ הקונפיגורציה (כמו בבילד הרגיל)
+          # יצירת האייקונים בתיקיות ה-Android
+          mkdir -p android/app/src/main/res/mipmap-mdpi android/app/src/main/res/mipmap-hdpi android/app/src/main/res/mipmap-xhdpi android/app/src/main/res/mipmap-xxhdpi android/app/src/main/res/mipmap-xxxhdpi
+          curl -s -L -o /tmp/icon.png "${{ github.event.client_payload.icon_url }}"
+          convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+
+          # הזרקת הקונפיגורציה
           CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
           cat > lib/app_config.dart << EOF
           class AppConfig {
@@ -45,12 +54,60 @@ jobs:
           }
           EOF
 
-      - name: Zip Source
+      - name: Create Standard .gitignore
         run: |
-          zip -r source_code.zip . -x ".git/*" ".github/*"
-          echo "ZIP_PATH=source_code.zip" >> $GITHUB_ENV
+          cat > .gitignore << EOF
+          # Flutter/Dart
+          .dart_tool/
+          .packages
+          .pub-cache/
+          .pub/
+          build/
 
-      - name: Upload to Supabase
+          # Android
+          android/**/generated/
+          android/gen/
+          android/local.properties
+          android/app/src/main/res/mipmap-*
+          .gradle/
+          capture.png
+
+          # IDEs
+          .idea/
+          .vscode/
+          *.iml
+          *.ipr
+          *.iws
+
+          # OS files
+          .DS_Store
+          Thumbs.db
+          EOF
+
+      - name: Create README Instruction
+        run: |
+          cat > README_FIRST.txt << EOF
+          # Web2App Source Code - ${{ github.event.client_payload.name }}
+
+          This package contains the full Flutter source code for your application.
+
+          ## Prerequisites
+          - Flutter SDK installed (https://docs.flutter.dev/get-started/install)
+          - Android Studio or VS Code with Flutter extension.
+
+          ## Quick Start
+          1. Extract this ZIP file.
+          2. Open the folder in your IDE.
+          3. Run 'flutter pub get' to install dependencies.
+          EOF
+
+      - name: Zip Clean Source
+        run: |
+          # סינון קפדני למניעת שגיאות תחביר או קבצים מיותרים ב-Zip
+          zip -r source_code.zip . \
+            -x ".git/*" ".github/*" "build/*" ".dart_tool/*" ".idea/*" "**/*.iml" "android/.gradle/*"
+
+      - name: Upload & Update Supabase
         run: |
           APP_ID="${{ github.event.client_payload.app_id }}"
           curl -s -X POST "${{ secrets.SUPABASE_URL }}/storage/v1/object/source-code/${APP_ID}.zip" \
@@ -66,11 +123,3 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
             -d "{\"status\": \"completed\", \"progress\": 100, \"source_url\": \"${DOWNLOAD_URL}\"}"
-
-      - name: Send Email
-        run: |
-          DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/source-code/${{ github.event.client_payload.app_id }}.zip"
-          curl -s -X POST 'https://api.resend.com/emails' \
-            -H "Authorization: Bearer ${{ secrets.RESEND_API_KEY }}" \
-            -H 'Content-Type: application/json' \
-            -d "{\"from\":\"Web2App <onboarding@resend.dev>\",\"to\":[\"${{ github.event.client_payload.notification_email }}\"],\"subject\":\"קוד המקור של האפליקציה שלך מוכן!\",\"html\":\"<div dir='rtl'><h1>הקוד מוכן!</h1><p>ניתן להוריד את קוד המקור של ${{ github.event.client_payload.name }} מכאן:</p><a href='$DOWNLOAD_URL'>הורד קוד מקור (ZIP)</a></div>\"}"
