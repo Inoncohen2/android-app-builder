@@ -7,7 +7,7 @@ on:
 jobs:
   # ============================================
   # ⚡ ג'וב 1: הזנקה מהירה (Instant Start)
-  # הג'וב הזה מתחיל תוך 2-3 שניות ומעדכן את המשתמש מייד.
+  # עולה תוך שניות, מתקין כלים קלים ומכין אייקונים
   # ============================================
   prepare:
     runs-on: ubuntu-latest
@@ -24,6 +24,11 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install Graphic Tools
+        run: |
+          sudo apt-get update > /dev/null 2>&1
+          sudo apt-get install -y imagemagick > /dev/null 2>&1
 
       - name: Process Assets & Config
         id: prep_step
@@ -85,8 +90,7 @@ jobs:
             lib/app_config.dart
 
   # ============================================
-  # 🏗️ ג'וב 2: הבנייה (החלק הכבד)
-  # הג'וב הזה כולל קאש מורחב ל-SDK ו-Gradle
+  # 🏗️ ג'וב 2: הבנייה (החלק הכבד בטורבו)
   # ============================================
   build:
     needs: prepare
@@ -112,7 +116,7 @@ jobs:
           name: prep-files
 
       # ============================================
-      # ⚡ MEGA CACHE V3 (כולל Android SDK)
+      # ⚡ MEGA CACHE (כולל Android SDK)
       # ============================================
       - name: Mega Cache
         uses: actions/cache@v4
@@ -125,9 +129,9 @@ jobs:
             /opt/android-sdk-linux/platforms
             /opt/android-sdk-linux/build-tools
             build/
-          key: ${{ runner.os }}-mega-v3-${{ hashFiles('**/*.gradle*', 'pubspec.lock') }}
+          key: ${{ runner.os }}-mega-v4-${{ hashFiles('**/*.gradle*', 'pubspec.lock') }}
           restore-keys: |
-            ${{ runner.os }}-mega-v3-
+            ${{ runner.os }}-mega-v4-
 
       - name: Create Progress Helper
         run: |
@@ -145,13 +149,11 @@ jobs:
       - name: Pre-warm SDK & Dependencies
         run: |
           ./update_progress.sh 45 "Warming up Android environment..."
-          # הורדת רכיבי אנדרואיד חסרים בבת אחת
           flutter precache --android --no-universal
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
 
       - name: Build Application
         run: |
-          # לולאת אחוזים (תיאטרון) חסינת שגיאות sh
           (
             i=50
             while [ $i -le 90 ]; do
@@ -165,7 +167,6 @@ jobs:
           ) &
           BG_PID=$!
 
-          # הגדרות Gradle למהירות מקסימלית
           mkdir -p ~/.gradle
           echo "org.gradle.caching=true" > ~/.gradle/gradle.properties
           echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
@@ -189,7 +190,6 @@ jobs:
       - name: Cache Cleanup
         if: always()
         run: |
-          # ניקוי קבצי זמניים כדי שהקאש לא יתנפח מעל 10GB
           rm -rf build/app/outputs/flutter-apk/*.sha1
           find ~/.gradle/caches -name "*.lock" -type f -delete
 
