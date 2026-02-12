@@ -37,7 +37,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"progress\": 10, \"build_message\": \"Generating adaptive icons...\"}"
 
-          # 1. יצירת אייקונים אדפטיביים
+          # 1. יצירת אייקונים אדפטיביים (מהקוד המשודרג)
           mkdir -p android/app/src/main/res/mipmap-xxxhdpi android/app/src/main/res/values
           curl -s -L -o /tmp/icon.png "${{ github.event.client_payload.icon_url }}"
           
@@ -89,8 +89,7 @@ jobs:
             static const bool keepAwake = ${{ github.event.client_payload.config.keep_awake }};
             static const bool openExternalLinks = ${{ github.event.client_payload.config.open_external_links }};
             static const String privacyPolicyUrl = '${{ github.event.client_payload.config.privacy_policy_url }}';
-            static const String termsUrl = '${{ github.event.client_payload.config.terms_of_service_url }}';
-            static const String splashColor = '${{ github.event.client_payload.config.splash_color }}';
+            static const String termsUrl = '${{ github.event.client_payload.config.terms_url }}';
           }
           EOF
 
@@ -234,7 +233,7 @@ jobs:
         run: |
           APP_NAME_CLEAN=$(echo "${{ github.event.client_payload.name }}" | tr ' ' '_')
           DOWNLOAD_URL="$SUPA_URL/storage/v1/object/public/builds/${APP_ID}.${{ github.event.client_payload.build_format }}?download=${APP_NAME_CLEAN}.${{ github.event.client_payload.build_format }}"
-          
+          # שימוש בתבנית המייל המושקעת מהקוד המשודרג
           EMAIL_HTML="<!DOCTYPE html><html dir='rtl'><body style='font-family:Arial;background:#f0f2f5;text-align:center;padding:40px;'><div style='background:white;border-radius:20px;padding:40px;max-width:600px;margin:0 auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);'><h1 style='color:#2196F3;'>האפליקציה שלך מוכנה! 🎉</h1><p style='font-size:18px;'>הבנייה של <b>${{ github.event.client_payload.name }}</b> הסתיימה בהצלחה.</p><br><a href='$DOWNLOAD_URL' style='background:#2196F3;color:white;padding:15px 30px;text-decoration:none;border-radius:50px;font-weight:bold;font-size:18px;'>הורד ${{ github.event.client_payload.build_format }}</a><br><br><p style='color:#666;font-size:12px;'>נבנה באמצעות Web2App Builder</p></div></body></html>"
           
           EMAIL_HTML_ESCAPED=$(echo "$EMAIL_HTML" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr -d '\n')
