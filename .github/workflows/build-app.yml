@@ -227,7 +227,7 @@ jobs:
           curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.${APP_ID}" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" \
             -H "Content-Type: application/json" \
-            -d "{\"status\": \"completed\", \"progress\": 100, \"build_message\": \"Done!\", \"download_url\": \"${DOWNLOAD_URL}\"}"
+            -d "{\"apk_status\": \"completed\", \"progress\": 100, \"build_message\": \"Done!\", \"download_url\": \"${DOWNLOAD_URL}\"}"
 
       - name: Send Beautiful Email
         run: |
