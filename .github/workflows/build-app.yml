@@ -24,10 +24,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ============================================
-      # ⚡ SUPER CACHE (חוסך זמן בילד)
-      # ============================================
-      - name: Cache Everything (Gradle, Flutter, Build)
+      - name: Create Progress Helper & Start (1%)
+        run: |
+          cat << 'EOF' > update_progress.sh
+          #!/bin/sh
+          curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.$APP_ID" \
+            -H "apikey: $SUPA_KEY" \
+            -H "Authorization: Bearer $SUPA_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"progress\": $1, \"build_message\": \"$2\"}" > /dev/null
+          EOF
+          chmod +x update_progress.sh
+          ./update_progress.sh 1 "Initializing build process..."
+
+      - name: Report Run ID (2%)
+        run: |
+          curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.$APP_ID" \
+            -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"github_run_id\": \"${{ github.run_id }}\"}" > /dev/null
+          ./update_progress.sh 2 "Allocating server resources..."
+
+      - name: Cache Gradle & Build
         uses: actions/cache@v4
         with:
           path: |
@@ -40,87 +58,60 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-mega-cache-
 
-      # ============================================
-      # 🚀 Helper Script & Init (1% - 3%)
-      # ============================================
-      - name: Create Progress Helper & Start (1%)
-        run: |
-          cat << 'EOF' > update_progress.sh
-          #!/bin/bash
-          curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.$APP_ID" \
-            -H "apikey: $SUPA_KEY" \
-            -H "Authorization: Bearer $SUPA_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{\"progress\": $1, \"build_message\": \"$2\"}" > /dev/null
-          EOF
-          chmod +x update_progress.sh
-          
-          ./update_progress.sh 1 "Initializing secure connection..."
-
-      - name: Report Run ID (2%)
-        run: |
-          curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.$APP_ID" \
-            -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{\"github_run_id\": \"${{ github.run_id }}\"}" > /dev/null
-          
-          ./update_progress.sh 2 "Linking build process..."
-
       - name: Verify Environment (3%)
-        run: ./update_progress.sh 3 "Verifying build environment..."
+        run: ./update_progress.sh 3 "Restoring cached resources..."
 
-      # ============================================
-      # 🎨 Graphic Tools (4% - 9%)
-      # ============================================
-      - name: Install Graphic Tools
+      - name: Before Flutter Setup (Start Ticker)
         run: |
-          ./update_progress.sh 4 "Preparing graphic tools..."
+          ./update_progress.sh 4 "Verifying Flutter SDK..."
           (
-            for i in {5..8}; do
+            i=5
+            while [ $i -le 11 ]; do
+              ./update_progress.sh $i "Optimizing framework ($i%)..."
               sleep 1
-              ./update_progress.sh $i "Loading graphics engine ($i%)..."
+              i=$((i + 1))
+            done
+          ) &
+          echo "FLUTTER_PID=$!" >> $GITHUB_ENV
+
+      - name: Setup Flutter (Verified)
+        run: flutter --version
+
+      - name: After Flutter Setup (12%)
+        run: |
+          [ -n "$FLUTTER_PID" ] && kill $FLUTTER_PID 2>/dev/null || true
+          ./update_progress.sh 12 "Flutter engine ready..."
+
+      - name: Install ImageMagick & Tools
+        run: |
+          ./update_progress.sh 13 "Preparing image processing tools..."
+          (
+            i=14
+            while [ $i -le 17 ]; do
+              ./update_progress.sh $i "Installing system packages ($i%)..."
+              sleep 1
+              i=$((i + 1))
             done
           ) &
           BG_PID=$!
-          
           sudo apt-get update > /dev/null 2>&1
           sudo apt-get install -y imagemagick optipng pngquant zip > /dev/null 2>&1
-          
           kill $BG_PID 2>/dev/null || true
-          ./update_progress.sh 9 "Graphics engine ready..."
+          ./update_progress.sh 18 "System tools ready..."
 
-      # ============================================
-      # 🖼️ Icons Processing (10% - 25%)
-      # ============================================
-      - name: Process App Icons
+      - name: Download Icon & Process (20% - 25%)
         run: |
-          ./update_progress.sh 10 "Downloading app icon..."
-          
-          # יצירת תיקיות בצורה מפורשת ובטוחה
-          mkdir -p android/app/src/main/res/mipmap-mdpi
-          mkdir -p android/app/src/main/res/mipmap-hdpi
-          mkdir -p android/app/src/main/res/mipmap-xhdpi
-          mkdir -p android/app/src/main/res/mipmap-xxhdpi
-          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
-          
+          ./update_progress.sh 20 "Downloading app icon..."
+          mkdir -p android/app/src/main/res/mipmap-mdpi android/app/src/main/res/mipmap-hdpi android/app/src/main/res/mipmap-xhdpi android/app/src/main/res/mipmap-xxhdpi android/app/src/main/res/mipmap-xxxhdpi
           curl -s -L -o /tmp/icon.png "${{ github.event.client_payload.icon_url }}"
           
-          ./update_progress.sh 12 "Generating XXXHDPI assets..."
+          ./update_progress.sh 21 "Resizing icons..."
           convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-          
-          ./update_progress.sh 14 "Generating XXHDPI assets..."
           convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          
-          ./update_progress.sh 16 "Generating XHDPI assets..."
           convert /tmp/icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          
-          ./update_progress.sh 18 "Generating HDPI assets..."
           convert /tmp/icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
-          
-          ./update_progress.sh 20 "Generating MDPI assets..."
           convert /tmp/icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
 
-          ./update_progress.sh 22 "Creating adaptive background..."
           PRIMARY_COLOR="${{ github.event.client_payload.config.primary_color }}"
           [ -z "$PRIMARY_COLOR" ] && PRIMARY_COLOR="#FFFFFF"
           mkdir -p android/app/src/main/res/values
@@ -137,21 +128,9 @@ jobs:
           ICON_XML="<?xml version='1.0' encoding='utf-8'?><adaptive-icon xmlns:android='http://schemas.android.com/apk/res/android'><background android:drawable='@color/ic_launcher_background'/><foreground android:drawable='@mipmap/ic_launcher_foreground'/></adaptive-icon>"
           echo "$ICON_XML" > android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
           echo "$ICON_XML" > android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
-          
           ./update_progress.sh 25 "Icons processing complete..."
 
-      # ============================================
-      # 🛠️ Configuration & Settings (26% - 35%)
-      # ============================================
-      - name: Optimize Assets
-        run: |
-          ./update_progress.sh 26 "Optimizing PNG assets..."
-          find android/app/src/main/res -name "*.png" -exec optipng -o2 -quiet {} \; || true
-          
-          ./update_progress.sh 28 "Compressing resources..."
-          find android/app/src/main/res -name "*.png" -exec pngquant --force --ext .png --quality=80-100 {} \; || true
-
-      - name: Apply Configurations
+      - name: Apply Configurations (30% - 41%)
         run: |
           ./update_progress.sh 30 "Injecting package name..."
           PKG="${{ github.event.client_payload.package_name }}"
@@ -162,204 +141,60 @@ jobs:
           sed -i "s/^package .*/package $PKG/" android/app/src/main/kotlin/com/example/app/MainActivity.kt
           sed -i "s/android:label=\".*\"/android:label=\"$NAME\"/" android/app/src/main/AndroidManifest.xml
 
-          ./update_progress.sh 32 "Generating AppConfig..."
+          ./update_progress.sh 35 "Generating AppConfig..."
           CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
-          
-          NAV="${{ github.event.client_payload.config.navigation }}"
-          PTR="${{ github.event.client_payload.config.pull_to_refresh }}"
-          SPLASH="${{ github.event.client_payload.config.splash_screen }}"
-          ZOOM="${{ github.event.client_payload.config.enable_zoom }}"
-          AWAKE="${{ github.event.client_payload.config.keep_awake }}"
-          LINKS="${{ github.event.client_payload.config.open_external_links }}"
-          PRIMARY="${{ github.event.client_payload.config.primary_color }}"
-          THEME="${{ github.event.client_payload.config.theme_mode }}"
-          ORIENT="${{ github.event.client_payload.config.orientation }}"
-          PRIVACY_URL="${{ github.event.client_payload.config.privacy_policy_url }}"
-          TERMS_URL="${{ github.event.client_payload.config.terms_url }}"
-          
-          [ -z "$NAV" ] && NAV="true"
-          [ -z "$PTR" ] && PTR="true"
-          [ -z "$SPLASH" ] && SPLASH="false"
-          [ -z "$ZOOM" ] && ZOOM="false"
-          [ -z "$AWAKE" ] && AWAKE="false"
-          [ -z "$LINKS" ] && LINKS="false"
-          [ -z "$PRIMARY" ] && PRIMARY="#2196F3"
-          [ -z "$THEME" ] && THEME="auto"
-          [ -z "$ORIENT" ] && ORIENT="auto"
-
           cat > lib/app_config.dart << EOF
           class AppConfig {
             static const String appName = '${{ github.event.client_payload.name }}';
             static const String websiteUrl = '${CLEAN_URL}';
             static const String packageName = '${{ github.event.client_payload.package_name }}';
-            static const String primaryColor = '${PRIMARY}';
-            static const String themeMode = '${THEME}';
-            static const String orientation = '${ORIENT}';
-            static const bool showNavigation = ${NAV};
-            static const bool pullToRefresh = ${PTR};
-            static const bool splashScreen = ${SPLASH};
-            static const bool enableZoom = ${ZOOM};
-            static const bool keepAwake = ${AWAKE};
-            static const bool openExternalLinks = ${LINKS};
-            static const String privacyPolicyUrl = '${PRIVACY_URL}';
-            static const String termsUrl = '${TERMS_URL}';
+            static const String primaryColor = '${{ github.event.client_payload.config.primary_color }}';
+            static const String themeMode = '${{ github.event.client_payload.config.theme_mode }}';
+            static const String orientation = '${{ github.event.client_payload.config.orientation }}';
+            static const bool showNavigation = ${{ github.event.client_payload.config.navigation }};
+            static const bool pullToRefresh = ${{ github.event.client_payload.config.pull_to_refresh }};
+            static const bool splashScreen = ${{ github.event.client_payload.config.splash_screen }};
+            static const bool enableZoom = ${{ github.event.client_payload.config.enable_zoom }};
+            static const bool keepAwake = ${{ github.event.client_payload.config.keep_awake }};
+            static const bool openExternalLinks = ${{ github.event.client_payload.config.open_external_links }};
+            static const String privacyPolicyUrl = '${{ github.event.client_payload.config.privacy_policy_url }}';
+            static const String termsUrl = '${{ github.event.client_payload.config.terms_url }}';
           }
           EOF
+          ./update_progress.sh 41 "Configuration applied..."
 
-      - name: Create Settings Screen
-        run: |
-          ./update_progress.sh 34 "Building Settings screen..."
-          cat > lib/settings_screen.dart << 'DART_EOF'
-          import 'package:flutter/material.dart';
-          import 'package:url_launcher/url_launcher.dart';
-          import 'app_config.dart';
-
-          class SettingsScreen extends StatelessWidget {
-            const SettingsScreen({Key? key}) : super(key: key);
-
-            @override
-            Widget build(BuildContext context) {
-              return Scaffold(
-                appBar: AppBar(title: const Text('Settings')),
-                body: ListView(
-                  children: [
-                    const SizedBox(height: 20),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Text('About', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.grey[600], fontWeight: FontWeight.bold)),
-                    ),
-                    const SizedBox(height: 8),
-                    ListTile(leading: const Icon(Icons.info_outline), title: Text(AppConfig.appName), subtitle: const Text('Version 1.0.0')),
-                    const Divider(),
-                    if (AppConfig.privacyPolicyUrl.isNotEmpty || AppConfig.termsUrl.isNotEmpty) ...[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                        child: Text('Legal', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.grey[600], fontWeight: FontWeight.bold)),
-                      ),
-                      if (AppConfig.privacyPolicyUrl.isNotEmpty)
-                        ListTile(leading: const Icon(Icons.privacy_tip_outlined), title: const Text('Privacy Policy'), trailing: const Icon(Icons.open_in_new, size: 20), onTap: () => _launchURL(AppConfig.privacyPolicyUrl)),
-                      if (AppConfig.termsUrl.isNotEmpty)
-                        ListTile(leading: const Icon(Icons.description_outlined), title: const Text('Terms of Service'), trailing: const Icon(Icons.open_in_new, size: 20), onTap: () => _launchURL(AppConfig.termsUrl)),
-                      const Divider(),
-                    ],
-                    ListTile(leading: const Icon(Icons.language), title: const Text('Visit Website'), trailing: const Icon(Icons.open_in_new, size: 20), onTap: () => _launchURL(AppConfig.websiteUrl)),
-                  ],
-                ),
-              );
-            }
-
-            Future<void> _launchURL(String url) async {
-              if (url.isEmpty) return;
-              final uri = Uri.parse(url);
-              if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
-            }
-          }
-          DART_EOF
-          ./update_progress.sh 35 "Configuration complete..."
-
-      # ============================================
-      # 📦 PART 1: SOURCE CODE (36% - 100% if Source)
-      # ============================================
-      - name: Package Source Code
-        if: ${{ github.event.client_payload.build_format == 'source' }}
-        run: |
-          ./update_progress.sh 36 "Preparing source code..."
-          
-          (
-            for i in {37..60}; do
-              sleep 0.5
-              ./update_progress.sh $i "Compressing project files ($i%)..."
-            done
-          ) &
-          BG_PID=$!
-          
-          rm -rf build/ .gradle/ .dart_tool/
-          zip -r android-source.zip . -x ".git/*" "*.iml" ".idea/*"
-          
-          kill $BG_PID 2>/dev/null || true
-          
-          ./update_progress.sh 80 "Uploading source to cloud..."
-          curl -s -X POST \
-            "$SUPA_URL/storage/v1/object/source-code/${APP_ID}.zip" \
-            -H "Authorization: Bearer $SUPA_KEY" \
-            -H "Content-Type: application/zip" \
-            --data-binary @android-source.zip
-          
-          DOWNLOAD_URL="$SUPA_URL/storage/v1/object/public/source-code/${APP_ID}.zip"
-          curl -s -X PATCH \
-            "$SUPA_URL/rest/v1/apps?app_id=eq.${APP_ID}" \
-            -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{\"status\": \"completed\", \"progress\": 100, \"build_message\": \"Source code ready!\", \"source_url\": \"${DOWNLOAD_URL}\"}"
-
-      # ============================================
-      # 🛠️ PART 2: BINARY BUILD (36% - 100% if APK/AAB)
-      # ============================================
-      
-      - name: Fetch Dependencies
+      - name: Install Dependencies
         if: ${{ github.event.client_payload.build_format != 'source' }}
         run: |
-          ./update_progress.sh 36 "Fetching Flutter dependencies..."
-          (
-            for i in {37..45}; do
-              sleep 1
-              ./update_progress.sh $i "Resolving packages ($i%)..."
-            done
-          ) &
-          BG_PID=$!
-          
+          ./update_progress.sh 42 "Fetching dependencies..."
           flutter pub get
-          
-          kill $BG_PID 2>/dev/null || true
-          ./update_progress.sh 46 "Dependencies resolved..."
-
-      - name: Decode Keystore
-        if: ${{ github.event.client_payload.build_format != 'source' }}
-        run: |
-          ./update_progress.sh 48 "Configuring build environment..."
-          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
-          fi
+          ./update_progress.sh 50 "Dependencies ready..."
 
       - name: Build Application
         if: ${{ github.event.client_payload.build_format != 'source' }}
-        env:
-          KEYSTORE_PATH: upload-keystore.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          ./update_progress.sh 50 "Starting compilation (High Performance)..."
+          ./update_progress.sh 51 "Starting compilation (High Performance)..."
           
           mkdir -p ~/.gradle
-          
-          # הגדרות Gradle להפעלת הקאש האגרסיבי
           echo "org.gradle.caching=true" > ~/.gradle/gradle.properties
           echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" >> ~/.gradle/gradle.properties
           echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
-          echo "org.gradle.daemon=false" >> ~/.gradle/gradle.properties
-          echo "org.gradle.configureondemand=true" >> ~/.gradle/gradle.properties
-          
-          # הגדרת נתיב לקאש המקומי של האפליקציה (חשוב!)
-          mkdir -p ~/.gradle/android-build-cache
           echo "android.buildCacheDir=/root/.gradle/android-build-cache" >> ~/.gradle/gradle.properties
 
           (
-            for i in {51..90}; do
-              sleep 4
-              if [ $i -lt 65 ]; then
-                MSG="Compiling Dart code ($i%)..."
-              elif [ $i -lt 80 ]; then
-                MSG="Building native Android components ($i%)..."
-              else
-                MSG="Assembling final package ($i%)..."
-              fi
+            i=52
+            while [ $i -le 90 ]; do
+              if [ $i -lt 65 ]; then MSG="Compiling Dart ($i%)...";
+              elif [ $i -lt 80 ]; then MSG="Building native ($i%)...";
+              else MSG="Assembling package ($i%)..."; fi
               ./update_progress.sh $i "$MSG"
+              sleep 4
+              i=$((i + 1))
             done
           ) &
           BG_PID=$!
 
-          if [ "${{ github.event.client_payload.build_format }}" == "aab" ]; then
+          if [ "${{ github.event.client_payload.build_format }}" = "aab" ]; then
             flutter build appbundle --release
             BUILD_FILE="build/app/outputs/bundle/release/app-release.aab"
           else
@@ -367,64 +202,45 @@ jobs:
             BUILD_FILE="build/app/outputs/flutter-apk/app-release.apk"
           fi
           echo "BUILD_FILE=$BUILD_FILE" >> $GITHUB_ENV
-          
           kill $BG_PID 2>/dev/null || true
-          ./update_progress.sh 92 "Compilation successful!"
+          ./update_progress.sh 91 "App compiled successfully!"
+
+      - name: Package Source Code
+        if: ${{ github.event.client_payload.build_format == 'source' }}
+        run: |
+          ./update_progress.sh 92 "Zipping source code..."
+          rm -rf build/ .gradle/ .dart_tool/
+          zip -r android-source.zip . -x ".git/*" "*.iml" ".idea/*"
+          curl -s -X POST "$SUPA_URL/storage/v1/object/source-code/${APP_ID}.zip" -H "Authorization: Bearer $SUPA_KEY" -H "Content-Type: application/zip" --data-binary @android-source.zip
+          DOWNLOAD_URL="$SUPA_URL/storage/v1/object/public/source-code/${APP_ID}.zip"
+          curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.${APP_ID}" -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" -H "Content-Type: application/json" -d "{\"status\": \"completed\", \"progress\": 100, \"source_url\": \"${DOWNLOAD_URL}\"}"
 
       - name: Upload Binary & Complete
         if: ${{ github.event.client_payload.build_format != 'source' }}
         run: |
-          ./update_progress.sh 94 "Uploading to cloud..."
+          ./update_progress.sh 94 "Preparing final upload..."
           FORMAT="${{ github.event.client_payload.build_format }}"
           APP_NAME_CLEAN=$(echo "${{ github.event.client_payload.name }}" | tr ' ' '_')
-          
           curl -s -X POST "$SUPA_URL/storage/v1/object/builds/${APP_ID}.${FORMAT}" \
             -H "Authorization: Bearer $SUPA_KEY" \
             -H "Content-Type: application/octet-stream" \
             --data-binary @"$BUILD_FILE"
-            
-          ./update_progress.sh 98 "Finalizing release..."
-          
           DOWNLOAD_URL="$SUPA_URL/storage/v1/object/public/builds/${APP_ID}.${FORMAT}?download=${APP_NAME_CLEAN}.${FORMAT}"
-          
           curl -s -X PATCH "$SUPA_URL/rest/v1/apps?app_id=eq.${APP_ID}" \
             -H "apikey: $SUPA_KEY" -H "Authorization: Bearer $SUPA_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"status\": \"completed\", \"progress\": 100, \"build_message\": \"Build completed!\", \"download_url\": \"${DOWNLOAD_URL}\"}"
 
-      - name: Send Beautiful Email
+      - name: Send Email
         run: |
           APP_NAME_CLEAN=$(echo "${{ github.event.client_payload.name }}" | tr ' ' '_')
-          
-          # ✅ תיקון שגיאת ה-Syntax: השוואה עם = יחיד
           if [ "${{ github.event.client_payload.build_format }}" = "source" ]; then
-             EXT="zip"
-             TYPE_NAME="קוד מקור"
              DL_PATH="source-code/${APP_ID}.zip"
+             TYPE="Source Code"
           else
              EXT="${{ github.event.client_payload.build_format }}"
-             # ✅ תיקון שגיאת ה-Substitution: שימוש ב-tr
-             TYPE_NAME=$(echo "$EXT" | tr '[:lower:]' '[:upper:]')
              DL_PATH="builds/${APP_ID}.${EXT}?download=${APP_NAME_CLEAN}.${EXT}"
+             TYPE=$(echo "$EXT" | tr '[:lower:]' '[:upper:]')
           fi
-          
           DOWNLOAD_URL="$SUPA_URL/storage/v1/object/public/${DL_PATH}"
-          PRIMARY_COLOR="${{ github.event.client_payload.config.primary_color }}"
-          [ -z "$PRIMARY_COLOR" ] && PRIMARY_COLOR="#2196F3"
-          ICON_URL="${{ github.event.client_payload.icon_url }}"
-          
-          FEATURES=""
-          if [ "${{ github.event.client_payload.config.navigation }}" = "true" ]; then
-            FEATURES="${FEATURES}<span style='display:inline-block;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;margin:4px;'>🧭 Navigation</span>"
-          fi
-          if [ "${{ github.event.client_payload.config.pull_to_refresh }}" = "true" ]; then
-            FEATURES="${FEATURES}<span style='display:inline-block;background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);color:white;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;margin:4px;'>🔄 Refresh</span>"
-          fi
-          if [ "${{ github.event.client_payload.config.enable_zoom }}" = "true" ]; then
-            FEATURES="${FEATURES}<span style='display:inline-block;background:linear-gradient(135deg,#4facfe 0%,#00f2fe 100%);color:white;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;margin:4px;'>🔍 Zoom</span>"
-          fi
-          if [ "${{ github.event.client_payload.config.splash_screen }}" = "true" ]; then
-            FEATURES="${FEATURES}<span style='display:inline-block;background:linear-gradient(135deg,#fa709a 0%,#fee140 100%);color:white;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;margin:4px;'>✨ Splash</span>"
-          fi
-          
-          EMAIL_HTML="<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'></head><body style='margin:0;padding:0;font-family:Arial,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);'><div style='max-width:650px;margin:40px auto;padding:0 20px;'><div style='text-align:center;margin-bottom:24px;'><img src='https://res.cloudinary.com/ddsogd7hv/image/upload/v1770576910/Icon2_dvenip.png' style='width:80px;height:80px;border-radius:20px;box-shadow:0 8px 24px rgba(0,0,0,0.2);'/><div style='margin-top:12px;'><a href='https://web2app-builder.vercel.app/' style='color:white;text-decoration:none;font-size:24px;font-weight:700;'>Web2App Builder</a></div></div><div style='background:white;border-radius:24px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3);'><div style='background:${PRIMARY_COLOR};padding:48px 32px;text-align:center;'><div style='font-size:64px;margin-bottom:16px;'>✅</div><h1 style='margin:0;color:white;font-size:28px;'>האפליקציה שלך מוכנה! 🎉</h1><p style='margin:16px 0 0;color:rgba(255,255,255,0.95);'>הבנייה הושלמה בהצלחה</p></div><div style='padding:40px 32px;'><div style='text-align:center;margin-bottom:32px;'><img src='${ICON_URL}' style='width:100px;height:100px;border-radius:24px;box-shadow:0 8px 24px rgba(0,0,0,0.15);margin-bottom:16px;'/><h2 style='margin:0;color:#1a1a1a;font-size:24px;'>${{ github.event.client_payload.name }}</h2><p style='margin:8px 0 0;color:#666;font-size:14px;'>${{ github.event.client_payload.package_name }}</p></div><div style='background:linear-gradient(135deg,#f8f9fa 0%,#e9ecef 100%);border-radius:16px;padding:24px;margin-bottom:32px;'><table style='width:100%;'><tr><td style='padding:14px 0;border-bottom:1px solid rgba(0,0,0,0.06);'><span style='font-size:20px;margin-left:12px;'>🌐</span><span style='color:#666;font-size:14px;'>כתובת האתר</span></td><td style='padding:14px 0;border-bottom:1px solid rgba(0,0,0,0.06);text-align:left;'><a href='${{ github.event.client_payload.website_url }}' style='color:${PRIMARY_COLOR};text-decoration:none;font-weight:600;font-size:14px;'>${{ github.event.client_payload.website_url }}</a></td></tr><tr><td style='padding:14px 0;'><span style='font-size:20px;margin-left:12px;'>📦</span><span style='color:#666;font-size:14px;'>Package</span></td><td style='padding:14px 0;text-align:left;'><code style='background:white;padding:6px 12px;border-radius:6px;font-size:13px;'>${{ github.event.client_payload.package_name }}</code></td></tr></table></div><div style='text-align:center;margin:40px 0;'><a href='${DOWNLOAD_URL}' style='display:inline-block;background:${PRIMARY_COLOR};color:white;text-decoration:none;padding:18px 56px;border-radius:50px;font-size:18px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,0.2);'>⬇️ הורד ${TYPE_NAME}</a></div><div style='background:#ffeef8;padding:24px;border-radius:16px;margin:24px 0;'><h3 style='margin:0 0 16px;color:#1a1a1a;font-size:18px;'>✨ פיצ'רים</h3><div style='text-align:center;'>${FEATURES}</div></div><div style='background:#fff3cd;border-radius:16px;padding:28px;border-left:4px solid #ffc107;'><h3 style='margin:0 0 16px;color:#856404;font-size:18px;'>📖 הוראות התקנה</h3><ol style='margin:0;padding-right:24px;color:#856404;font-size:15px;line-height:2;'><li>הורד את קובץ ה-APK</li><li>פתח את הקובץ</li><li>אשר התקנה</li><li>המתן להתקנה</li><li>תהנה! 🎉</li></ol></div></div><div style='background:linear-gradient(135deg,#2d3748 0%,#1a202c 100%);padding:32px;text-align:center;'><img src='https://res.cloudinary.com/ddsogd7hv/image/upload/v1770576910/Icon2_dvenip.png' style='width:48px;height:48px;border-radius:12px;margin-bottom:16px;'/><p style='margin:0 0 8px;color:white;font-size:16px;'>נבנה ב-<a href='https://web2app-builder.vercel.app/' style='color:#60a5fa;text-decoration:none;font-weight:700;'>Web2App Builder</a></p><p style='margin:0;color:rgba(255,255,255,0.6);font-size:13px;'>הפוך כל אתר לאפליקציה מקצועית</p><div style='margin-top:20px;'><a href='https://web2app-builder.vercel.app/' style='background:rgba(255,255,255,0.1);color:white;text-decoration:none;padding:12px 32px;border-radius:8px;display:inline-block;font-size:14px;'>בקר באתר 🚀</a></div><p style='margin:20px 0 0;color:rgba(255,255,255,0.4);font-size:12px;'>© 2026 Web2App Builder</p></div></div></div></body></html>"
+          curl -s -X POST 'https://api.resend.com/emails' -H "Authorization: Bearer ${{ secrets.RESEND_API_KEY }}" -H 'Content-Type: application/json' -d "{\"from\":\"Web2App Builder <onboarding@resend.dev>\",\"to\":[\"${{ github.event.client_payload.notification_email }}\"],\"subject\":\"🎉 האפליקציה שלך מוכנה! ($TYPE)\",\"html\":\"<html><body><h1>האפליקציה שלך מוכנה!</h1><p>שם: ${{ github.event.client_payload.name }}</p><a href='$DOWNLOAD_URL'>לחץ כאן להורדה</a></body></html>\"}"
