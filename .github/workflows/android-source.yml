@@ -1,0 +1,76 @@
+name: Package Android Source Code
+
+on:
+  repository_dispatch:
+    types: [package-source]
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Initial Notification
+        run: |
+          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"progress\": 10, \"build_message\": \"Starting source code packaging...\"}"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare Files
+        run: |
+          # ניקוי תיקיות זמניות אם קיימות
+          rm -rf build/ .gradle/ .dart_tool/
+          
+          # יצירת קובץ הקונפיגורציה (כמו בבילד הרגיל)
+          CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
+          cat > lib/app_config.dart << EOF
+          class AppConfig {
+            static const String appName = '${{ github.event.client_payload.name }}';
+            static const String websiteUrl = '${CLEAN_URL}';
+            static const String packageName = '${{ github.event.client_payload.package_name }}';
+            static const String primaryColor = '${{ github.event.client_payload.config.primary_color }}';
+            static const String themeMode = '${{ github.event.client_payload.config.theme_mode }}';
+            static const String orientation = '${{ github.event.client_payload.config.orientation }}';
+            static const bool showNavigation = ${{ github.event.client_payload.config.navigation }};
+            static const bool pullToRefresh = ${{ github.event.client_payload.config.pull_to_refresh }};
+            static const bool splashScreen = ${{ github.event.client_payload.config.splash_screen }};
+            static const bool enableZoom = ${{ github.event.client_payload.config.enable_zoom }};
+            static const bool keepAwake = ${{ github.event.client_payload.config.keep_awake }};
+            static const bool openExternalLinks = ${{ github.event.client_payload.config.open_external_links }};
+            static const String privacyPolicyUrl = '${{ github.event.client_payload.config.privacy_policy_url }}';
+            static const String termsUrl = '${{ github.event.client_payload.config.terms_url }}';
+          }
+          EOF
+
+      - name: Zip Source
+        run: |
+          zip -r source_code.zip . -x ".git/*" ".github/*"
+          echo "ZIP_PATH=source_code.zip" >> $GITHUB_ENV
+
+      - name: Upload to Supabase
+        run: |
+          APP_ID="${{ github.event.client_payload.app_id }}"
+          curl -s -X POST "${{ secrets.SUPABASE_URL }}/storage/v1/object/source-code/${APP_ID}.zip" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "x-upsert: true" \
+            -H "Content-Type: application/zip" \
+            --data-binary @source_code.zip
+          
+          DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/source-code/${APP_ID}.zip"
+          
+          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${APP_ID}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"status\": \"completed\", \"progress\": 100, \"source_url\": \"${DOWNLOAD_URL}\"}"
+
+      - name: Send Email
+        run: |
+          DOWNLOAD_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/source-code/${{ github.event.client_payload.app_id }}.zip"
+          curl -s -X POST 'https://api.resend.com/emails' \
+            -H "Authorization: Bearer ${{ secrets.RESEND_API_KEY }}" \
+            -H 'Content-Type: application/json' \
+            -d "{\"from\":\"Web2App <onboarding@resend.dev>\",\"to\":[\"${{ github.event.client_payload.notification_email }}\"],\"subject\":\"קוד המקור של האפליקציה שלך מוכן!\",\"html\":\"<div dir='rtl'><h1>הקוד מוכן!</h1><p>ניתן להוריד את קוד המקור של ${{ github.event.client_payload.name }} מכאן:</p><a href='$DOWNLOAD_URL'>הורד קוד מקור (ZIP)</a></div>\"}"
