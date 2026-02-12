@@ -7,10 +7,9 @@ on:
 jobs:
   # ============================================
   # ⚡ ג'וב 1: הזנקה מהירה (Instant Start)
-  # [span_3](start_span)הג'וב הזה רץ על שרת נקי ועולה תוך שניות[span_3](end_span).
   # ============================================
   prepare:
-    [span_4](start_span)[span_5](start_span)runs-on: ubuntu-latest[span_4](end_span)[span_5](end_span)
+    runs-on: ubuntu-latest
     outputs:
       app_name_clean: ${{ steps.prep_step.outputs.app_name_clean }}
     steps:
@@ -20,12 +19,11 @@ jobs:
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
-            -[span_6](start_span)[span_7](start_span)d "{\"progress\": 1, \"build_message\": \"Connecting to build server...\"}"[span_6](end_span)[span_7](end_span)
+            -d "{\"progress\": 1, \"build_message\": \"Connecting to build server...\"}"
 
       - name: Checkout
-        [span_8](start_span)[span_9](start_span)uses: actions/checkout@v4[span_8](end_span)[span_9](end_span)
+        uses: actions/checkout@v4
 
-      # [span_10](start_span)תיקון השגיאה: התקנת ImageMagick עבור פקודת convert[span_10](end_span)
       - name: Install Graphic Tools
         run: |
           sudo apt-get update > /dev/null 2>&1
@@ -38,10 +36,10 @@ jobs:
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
-            -[span_11](start_span)[span_12](start_span)d "{\"progress\": 10, \"build_message\": \"Processing app assets and icons...\"}"[span_11](end_span)[span_12](end_span)
+            -d "{\"progress\": 10, \"build_message\": \"Processing app assets and icons...\"}"
 
-          # [span_13](start_span)[span_14](start_span)יצירת אייקונים[span_13](end_span)[span_14](end_span)
           mkdir -p android/app/src/main/res/mipmap-mdpi android/app/src/main/res/mipmap-hdpi android/app/src/main/res/mipmap-xhdpi android/app/src/main/res/mipmap-xxhdpi android/app/src/main/res/mipmap-xxxhdpi
+          
           curl -s -L -o /tmp/icon.png "${{ github.event.client_payload.icon_url }}"
           convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
@@ -49,7 +47,6 @@ jobs:
           convert /tmp/icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
           convert /tmp/icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
 
-          # [span_15](start_span)[span_16](start_span)יצירת קובץ הקונפיגורציה[span_15](end_span)[span_16](end_span)
           CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
           cat > lib/app_config.dart << EOF
           class AppConfig {
@@ -72,7 +69,11 @@ jobs:
 
           echo "app_name_clean=$(echo '${{ github.event.client_payload.name }}' | tr ' ' '_')" >> $GITHUB_OUTPUT
           
-          ./update_progress.sh 35 "Environment ready, starting build engine..." 2>/dev/null || true
+          curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"progress\": 35, \"build_message\": \"Assets ready, launching build engine...\"}"
 
       - name: Upload Prepared Files
         uses: actions/upload-artifact@v4
@@ -83,7 +84,7 @@ jobs:
             lib/app_config.dart
 
   # ============================================
-  # 🏗️ ג'וב 2: הבנייה (החלק הכבד בטורבו)
+  # 🏗️ ג'וב 2: הבנייה (החלק הכבד)
   # ============================================
   build:
     needs: prepare
@@ -98,7 +99,7 @@ jobs:
 
     steps:
       - name: Fix Git Permissions
-        [span_17](start_span)[span_18](start_span)run: git config --global --add safe.directory '*'[span_17](end_span)[span_18](end_span)
+        run: git config --global --add safe.directory '*'
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -108,7 +109,6 @@ jobs:
         with:
           name: prep-files
 
-      # שימוש במפתח קאש חדש כדי להבטיח התחלה נקייה ותקינה
       - name: Mega Cache
         uses: actions/cache@v4
         with:
@@ -120,9 +120,9 @@ jobs:
             /opt/android-sdk-linux/platforms
             /opt/android-sdk-linux/build-tools
             build/
-          key: ${{ runner.os }}-mega-v9-${{ hashFiles('**/*.gradle*', 'pubspec.lock') }}
+          key: ${{ runner.os }}-mega-v10-${{ hashFiles('**/*.gradle*', 'pubspec.lock') }}
           restore-keys: |
-            ${{ runner.os }}-mega-v9-
+            ${{ runner.os }}-mega-v10-
 
       - name: Create Progress Helper
         run: |
@@ -135,7 +135,6 @@ jobs:
             -d "{\"progress\": $1, \"build_message\": \"$2\"}" > /dev/null
           EOF
           chmod +x update_progress.sh
-          ./update_progress.sh 40 "Build engine initialized..."
 
       - name: Pre-warm SDK & Dependencies
         run: |
@@ -145,7 +144,6 @@ jobs:
 
       - name: Build Application
         run: |
-          # תיקון לולאת האחוזים לתחביר sh (while במקום {})
           (
             i=50
             while [ $i -le 90 ]; do
@@ -166,7 +164,6 @@ jobs:
 
           flutter pub get
           
-          # שימוש ב-no-pub לחיסכון בזמן
           if [ "${{ github.event.client_payload.build_format }}" = "aab" ]; then
             flutter build appbundle --release --no-pub
             BUILD_FILE="build/app/outputs/bundle/release/app-release.aab"
@@ -182,8 +179,7 @@ jobs:
       - name: Cache Cleanup
         if: always()
         run: |
-          # מחיקת קבצי נעילה בלבד כדי לא להכשיל את הבילד
-          [span_19](start_span)[span_20](start_span)[ -d ~/.gradle/caches ] && find ~/.gradle/caches -name "*.lock" -type f -delete 2>/dev/null || true[span_19](end_span)[span_20](end_span)
+          [ -d ~/.gradle/caches ] && find ~/.gradle/caches -name "*.lock" -type f -delete 2>/dev/null || true
 
       - name: Upload Binary & Complete
         run: |
@@ -191,7 +187,6 @@ jobs:
           FORMAT="${{ github.event.client_payload.build_format }}"
           APP_NAME="${{ needs.prepare.outputs.app_name_clean }}"
           
-          # ✅ תיקון קריטי: x-upsert מאפשר דריסת קובץ קיים ב-Supabase
           curl -s -X POST "$SUPA_URL/storage/v1/object/builds/${APP_ID}.${FORMAT}" \
             -H "Authorization: Bearer $SUPA_KEY" \
             -H "x-upsert: true" \
