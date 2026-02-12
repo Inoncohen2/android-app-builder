@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Initial Notification
         run: |
-          # תיקון: שימוש ב-id=eq ועדכון עמודות status, progress ו-build_message
+          # תיקון: שימוש ב-id=eq. ובעמודות progress ו-build_message לפי הסכימה
           curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?id=eq.${{ github.event.client_payload.app_id }}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
@@ -27,6 +27,7 @@ jobs:
 
       - name: Install Graphic Tools
         run: |
+          # התקנה חסינה למניעת Exit code 3 בשלב עדכון החבילות 
           sudo apt-get update --fix-missing
           sudo apt-get install -y --no-install-recommends imagemagick optipng pngquant zip
 
@@ -43,10 +44,10 @@ jobs:
           # 1. יצירת אייקונים אדפטיביים
           mkdir -p android/app/src/main/res/mipmap-xxxhdpi android/app/src/main/res/values
           
-          # תיקון: משיכת האייקון מה-appIcon בתוך ה-config כדי למנוע שגיאת URL ריק
+          # תיקון קריטי: משיכת האייקון מ-config.appIcon כי icon_url הראשי ריק וגורם לשגיאה 3 
           curl -s -L -o /tmp/icon.png "${{ github.event.client_payload.config.appIcon }}"
           
-          # צבע רקע לאייקון (שימוש ב-primaryColor מה-config)
+          # צבע רקע לאייקון מהקונפיג
           PRIMARY_COLOR="${{ github.event.client_payload.config.primaryColor }}"
           [ -z "$PRIMARY_COLOR" ] && PRIMARY_COLOR="#FFFFFF"
           echo "<?xml version='1.0' encoding='utf-8'?><resources><color name='ic_launcher_background'>$PRIMARY_COLOR</color></resources>" > android/app/src/main/res/values/ic_launcher_background.xml
@@ -54,7 +55,7 @@ jobs:
           # יצירת Foreground (לוגו שקוף)
           convert /tmp/icon.png -bordercolor transparent -border 30% /tmp/icon_fg.png
           
-          # יצירת כל הגדלים ל-Foreground
+          # יצירת כל הגדלים
           mkdir -p android/app/src/main/res/mipmap-mdpi android/app/src/main/res/mipmap-hdpi android/app/src/main/res/mipmap-xhdpi android/app/src/main/res/mipmap-xxhdpi android/app/src/main/res/mipmap-xxxhdpi
           convert /tmp/icon_fg.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png
           convert /tmp/icon_fg.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png
@@ -62,22 +63,22 @@ jobs:
           convert /tmp/icon_fg.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png
           convert /tmp/icon_fg.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
 
-          # יצירת ה-XML שמחבר ביניהם
+          # יצירת ה-XML
           mkdir -p android/app/src/main/res/mipmap-anydpi-v26
           echo '<?xml version="1.0" encoding="utf-8"?><adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/ic_launcher_background"/><foreground android:drawable="@mipmap/ic_launcher_foreground"/></adaptive-icon>' > android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
           cp android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
 
-          # יצירת אייקונים רגילים (Legacy) למכשירים ישנים
+          # אייקונים רגילים (Legacy)
           convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
           convert /tmp/icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
 
-          # 2. אופטימיזציה של תמונות
+          # אופטימיזציה של תמונות
           find android/app/src/main/res -name "*.png" -exec optipng -o7 -quiet {} \;
 
-          # 3. יצירת קובץ קונפיגורציה (מיפוי למפתחות ה-Payload המדויקים)
+          # 3. יצירת קובץ קונפיגורציה (מיפוי מפתחות JSON)
           CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
           cat > lib/app_config.dart << EOF
           class AppConfig {
@@ -98,7 +99,7 @@ jobs:
           }
           EOF
 
-          # 4. יצירת מסך הגדרות דינאמי
+          # 4. יצירת מסך הגדרות
           cat > lib/settings_screen.dart << 'DART_EOF'
           import 'package:flutter/material.dart';
           import 'package:url_launcher/url_launcher.dart';
