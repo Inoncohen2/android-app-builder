@@ -7,7 +7,7 @@ on:
 jobs:
   # ============================================
   # ⚡ ג'וב 1: הזנקה מהירה (Instant Start)
-  # עולה תוך שניות, מתקין כלים קלים ומכין אייקונים
+  # עולה תוך 2-3 שניות ומעדכן את המשתמש מייד.
   # ============================================
   prepare:
     runs-on: ubuntu-latest
@@ -25,6 +25,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # תיקון הכישלון: התקנת ImageMagick בשרת ה-prepare
       - name: Install Graphic Tools
         run: |
           sudo apt-get update > /dev/null 2>&1
@@ -33,17 +34,14 @@ jobs:
       - name: Process Assets & Config
         id: prep_step
         run: |
-          # עדכון התקדמות ל-10%
           curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: application/json" \
             -d "{\"progress\": 10, \"build_message\": \"Processing app assets and icons...\"}"
 
-          # יצירת התיקייה לאייקונים
           mkdir -p android/app/src/main/res/mipmap-mdpi android/app/src/main/res/mipmap-hdpi android/app/src/main/res/mipmap-xhdpi android/app/src/main/res/mipmap-xxhdpi android/app/src/main/res/mipmap-xxxhdpi
           
-          # הורדה והמרת אייקונים
           curl -s -L -o /tmp/icon.png "${{ github.event.client_payload.icon_url }}"
           convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
@@ -51,7 +49,6 @@ jobs:
           convert /tmp/icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
           convert /tmp/icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
 
-          # יצירת קובץ הגדרות האפליקציה (Dart)
           CLEAN_URL=$(echo "${{ github.event.client_payload.website_url }}" | sed 's/__//g' | xargs)
           cat > lib/app_config.dart << EOF
           class AppConfig {
@@ -74,7 +71,6 @@ jobs:
 
           echo "app_name_clean=$(echo '${{ github.event.client_payload.name }}' | tr ' ' '_')" >> $GITHUB_OUTPUT
           
-          # סיום שלב ההכנה - 35%
           curl -s -X PATCH "${{ secrets.SUPABASE_URL }}/rest/v1/apps?app_id=eq.${{ github.event.client_payload.app_id }}" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
@@ -115,9 +111,7 @@ jobs:
         with:
           name: prep-files
 
-      # ============================================
-      # ⚡ MEGA CACHE (כולל Android SDK)
-      # ============================================
+      # קאש משודרג הכולל את ה-Android SDK למניעת הורדות חוזרות
       - name: Mega Cache
         uses: actions/cache@v4
         with:
@@ -129,9 +123,9 @@ jobs:
             /opt/android-sdk-linux/platforms
             /opt/android-sdk-linux/build-tools
             build/
-          key: ${{ runner.os }}-mega-v4-${{ hashFiles('**/*.gradle*', 'pubspec.lock') }}
+          key: ${{ runner.os }}-mega-v6-${{ hashFiles('**/*.gradle*', 'pubspec.lock') }}
           restore-keys: |
-            ${{ runner.os }}-mega-v4-
+            ${{ runner.os }}-mega-v6-
 
       - name: Create Progress Helper
         run: |
@@ -154,6 +148,7 @@ jobs:
 
       - name: Build Application
         run: |
+          # תיקון לולאת האחוזים לתחביר sh תקני
           (
             i=50
             while [ $i -le 90 ]; do
@@ -175,6 +170,7 @@ jobs:
 
           flutter pub get
           
+          # תיקון השוואה מ- == ל- = (sh compatible)
           if [ "${{ github.event.client_payload.build_format }}" = "aab" ]; then
             flutter build appbundle --release
             BUILD_FILE="build/app/outputs/bundle/release/app-release.aab"
@@ -190,8 +186,8 @@ jobs:
       - name: Cache Cleanup
         if: always()
         run: |
-          rm -rf build/app/outputs/flutter-apk/*.sha1
-          find ~/.gradle/caches -name "*.lock" -type f -delete
+          # ניקוי קבצי נעילה למניעת שגיאות בקאש הבא
+          find ~/.gradle/caches -name "*.lock" -type f -delete 2>/dev/null || true
 
       - name: Upload Binary & Complete
         run: |
